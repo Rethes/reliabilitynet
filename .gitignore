@@ -1,24 +1,63 @@
-# Logs
-logs
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Node / frontend build output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Python virtual environments and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+venv*/
+.python-version
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Local project environment and model artifacts
+model_env/
+meta_logistic_regression_model/
+roberta_sentiment_model/
+roberta_large_fake_news_model/
+roberta_large_clickbait_model/
+
+# Local databases and generated runtime files
+*.sqlite3
+*.db
+server/data.db
+*.sqlite
+.cache/
+.tmp/
+tmp/
+
+# Local package manager artifacts
+package-lock.json
+
+# Editor backups
+*.tmp
+*.bak
