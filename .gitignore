@@ -55,6 +55,10 @@ server/data.db
 .tmp/
 tmp/
 
+# SQLite temporary files
+*.db-shm
+*.db-wal
+
 # Local package manager artifacts
 package-lock.json
 
