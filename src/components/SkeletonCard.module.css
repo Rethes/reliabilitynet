@@ -1,0 +1,25 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.img { height: 180px; background: var(--surface2); }
+
+.body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.line {
+  height: 10px;
+  background: var(--surface3);
+  border-radius: 4px;
+}
+
+.short { width: 60%; }
+.medium { width: 85%; }
