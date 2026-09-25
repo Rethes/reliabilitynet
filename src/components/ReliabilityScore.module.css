@@ -1,0 +1,46 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.ring {
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+
+.ringBg {
+  fill: none;
+  stroke: var(--surface3);
+  stroke-width: 3;
+}
+
+.ringFill {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dashoffset: 0;
+  transition: stroke-dasharray 0.4s ease;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.pct {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.txt {
+  font-size: 0.58rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
