@@ -139,6 +139,37 @@ app.put('/auth/password', requireAuth, async (req, res) => {
   }
 });
 
+// ── Saved articles routes ──────────────────────────────────────────────────────
+app.get('/saves', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT article_json FROM saved_articles WHERE user_id = ? ORDER BY saved_at DESC').all(req.user.id);
+  const articles = rows.map(r => JSON.parse(r.article_json));
+  res.json({ articles });
+});
+
+app.post('/saves', requireAuth, (req, res) => {
+  const { article } = req.body || {};
+  if (!article) return res.status(400).json({ error: 'Article is required' });
+
+  const articleId = article.uuid || article.url;
+  if (!articleId) return res.status(400).json({ error: 'Article must have uuid or url' });
+
+  try {
+    db.prepare('INSERT OR IGNORE INTO saved_articles (user_id, article_id, article_json) VALUES (?, ?, ?)').run(
+      req.user.id, articleId, JSON.stringify(article)
+    );
+    res.json({ saved: true, articleId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save article' });
+  }
+});
+
+app.delete('/saves/:articleId', requireAuth, (req, res) => {
+  const { articleId } = req.params;
+  db.prepare('DELETE FROM saved_articles WHERE user_id = ? AND article_id = ?').run(req.user.id, articleId);
+  res.json({ saved: false, articleId });
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🔐 ReliabilityNet auth server running on http://localhost:${PORT}\n`);
