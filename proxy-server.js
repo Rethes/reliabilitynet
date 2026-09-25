@@ -7,8 +7,8 @@
 // Disable SSL cert verification for WiFi networks with SSL inspection
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const http = require('http');
-const url  = require('url');
+import http from 'node:http';
+import url from 'node:url';
 
 const PORT     = 3131;
 const API_BASE = 'https://api.webz.io';
