@@ -26,6 +26,7 @@ ReliabilityNet/
 ├── README.md                      # Project overview and setup instructions
 ├── AUTH_SETUP.md                  # Auth backend setup details
 ├── .gitignore                     # Files ignored by Git
+├── .env.example                   # Template for local environment variables
 ├── package.json                   # Frontend app scripts and dependencies
 ├── vite.config.js                 # Vite frontend config
 ├── index.html                     # Main HTML shell for the React app
@@ -92,15 +93,15 @@ pip install -r requirements.txt
 
 ### 4. Configure environment variables
 
-Create a `.env` file in the project root:
+Copy the example file to create a local `.env` file:
 
 ```bash
-VITE_API_KEY=your_webz_io_token_here
+cp .env.example .env
 ```
 
 Notes:
 
-- `VITE_API_KEY` is required for live news fetching.
+- Replace the `VITE_API_KEY` placeholder in `.env` with your Webz.io API key. It is required for live news fetching.
 - Vite loads `VITE_API_KEY` from the project-root `.env` file. Restart the frontend after changing it.
 - The auth server reads `JWT_SECRET` from its process environment; it does not load the root `.env` file. To override the local development default, export `JWT_SECRET` in the terminal before starting the services.
 
