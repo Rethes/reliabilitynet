@@ -24,6 +24,7 @@ The project is split into three runtime services:
 ```bash
 ReliabilityNet/
 ├── README.md                      # Project overview and setup instructions
+├── LICENSE.md                     # MIT License
 ├── AUTH_SETUP.md                  # Auth backend setup details
 ├── .gitignore                     # Files ignored by Git
 ├── .env.example                   # Template for local environment variables
@@ -245,7 +246,3 @@ npm start
 - The project expects Node.js 18+ and a local Python environment for model inference.
 - The ML model directories must remain in the repository root for the app to function correctly.
 - Additional auth and runtime details are documented in [AUTH_SETUP.md](AUTH_SETUP.md).
-
-## License
-
-This project is intended for local development and demonstration purposes.
