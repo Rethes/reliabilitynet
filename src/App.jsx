@@ -11,7 +11,7 @@ import SavedArticles from './components/SavedArticles';
 import { filterArticles, useNews } from './hooks/useNews';
 import LoginModal from './components/LoginModal';
 import ProfileModal from './components/ProfileModal';
-import styles from './App.css';
+import styles from './App.module.css';
 
 const SOURCE_COLOURS = ['#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#457b9d','#6a4c93','#1982c4'];
 
