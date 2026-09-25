@@ -39,7 +39,7 @@ ReliabilityNet/
 │   └── data.db                    # SQLite database for users and saved articles
 ├── src/
 │   ├── App.jsx                    # Main React app layout and page logic
-│   ├── index.jsx                  # React app entry point
+│   ├── main.jsx                   # React app entry point
 │   ├── App.module.css             # App-level styling
 │   ├── index.css                  # Global styles and design tokens
 │   ├── components/                # Reusable UI elements (cards, modals, badges, etc.)
@@ -54,7 +54,8 @@ ReliabilityNet/
 ├── model_env/                     # Python virtual environment for model inference
 ├── test_clickbait_server.py       # Smoke test for clickbait endpoint
 ├── test_fake_news_server.py       # Smoke test for fake-news endpoint
-├── test_sentiment_model.py        # Smoke test for sentiment endpoint
+├── test_reliability_server.py     # Smoke test for reliability endpoint
+├── test_sentiment_server.py       # Smoke test for sentiment endpoint
 └── node_modules/                  # Installed frontend dependencies
 ```
 
@@ -95,13 +96,13 @@ Create a `.env` file in the project root:
 
 ```bash
 VITE_API_KEY=your_webz_io_token_here
-JWT_SECRET=your_secret_here
 ```
 
 Notes:
 
 - `VITE_API_KEY` is required for live news fetching.
-- `JWT_SECRET` is optional but recommended for auth session signing.
+- Vite loads `VITE_API_KEY` from the project-root `.env` file. Restart the frontend after changing it.
+- The auth server reads `JWT_SECRET` from its process environment; it does not load the root `.env` file. To override the local development default, export `JWT_SECRET` in the terminal before starting the services.
 
 ## Run the app
 
@@ -206,11 +207,19 @@ The backend in `server/index.js` provides:
 
 ### Proxy errors
 
-If the frontend cannot fetch data, start the proxy first:
+The frontend checks the proxy at `http://localhost:3131/ping` before fetching news. If it displays “Start the proxy server first,” start the proxy in a terminal and leave that terminal open:
 
 ```bash
 node proxy-server.js
 ```
+
+Verify the proxy is responding from another terminal:
+
+```bash
+curl http://localhost:3131/ping
+```
+
+The response should be `{"ok":true}`. Then click **Retry** in the frontend.
 
 ### Model server errors
 
