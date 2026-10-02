@@ -38,26 +38,8 @@ export function formatDate(str) {
   });
 }
 
-// Reliability score (prioritizes Logistic Regression Meta-Classifier)
 export function getReliabilityScore(article) {
-  if (!article) return 50;
-
-  if (typeof article.reliabilityScore === 'number') {
-    return article.reliabilityScore;
-  }
-
-  const stored = getFromStorage(`rel_${article.uuid}`);
-  if (stored) return stored;
-
-  const text = (article.title || '') + getSourceName(article);
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = ((hash << 5) - hash) + text.charCodeAt(i);
-    hash |= 0;
-  }
-  // Range: 52–97%
-  const score = 52 + (Math.abs(hash) % 46);
-  return score;
+  return typeof article?.reliabilityScore === 'number' ? article.reliabilityScore : null;
 }
 
 export function getReliabilityColor(score) {
@@ -66,20 +48,8 @@ export function getReliabilityColor(score) {
   return 'var(--red)';
 }
 
-// Clickbait detection (prioritizes RoBERTa ML model prediction, with fallback)
 export function getClickbaitLabel(article) {
-  if (!article) return 'Not Clickbait';
-
-  if (article.clickbait) return article.clickbait;
-  if (article.modelClickbait) return article.modelClickbait;
-
-  const title = (article.title || '').toLowerCase();
-  const suspiciousSignals = [
-    'you won\'t believe', 'shocking secret', 'exposed viral',
-    'omg insane', 'mind-blowing truth', 'secret cure',
-    'you need to see', 'what happens next', 'this is why'
-  ];
-  return suspiciousSignals.some(s => title.includes(s)) ? 'Clickbait' : 'Not Clickbait';
+  return article?.modelClickbait ?? null;
 }
 
 // localStorage helpers

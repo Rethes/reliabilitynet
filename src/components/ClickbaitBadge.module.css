@@ -24,6 +24,12 @@
   background: rgba(54,102,68,0.07);
 }
 
+.unavailable {
+  color: var(--text3);
+  border-color: rgba(128,128,128,0.25);
+  background: rgba(128,128,128,0.07);
+}
+
 .mlBadge {
   box-shadow: 0 0 2px rgba(0,0,0,0.05);
 }
