@@ -11,7 +11,9 @@ export default function ReliabilityScore({ article }) {
   const score = getReliabilityScore(article);
   const color = getReliabilityColor(score);
   const metaLabel = article?.truthfulnessLabel ? ` (${article.truthfulnessLabel})` : '';
-  const tooltip = `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`;
+  const tooltip = article?.reliabilityAvailable === false
+    ? `Meta-classifier unavailable; neutral fallback score: ${score}%`
+    : `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`;
 
   return (
     <div className={styles.wrap} title={tooltip}>

@@ -28,20 +28,6 @@ function attachModelReliability(article, pred) {
   if (!article || !pred) return article;
 
   const updated = { ...article };
-  const fakeNewsPrediction = pred.fakeNews && typeof pred.fakeNews === 'object'
-    ? pred.fakeNews
-    : pred;
-  const fakeNewsLabel = typeof pred.fakeNews === 'string'
-    ? pred.fakeNews
-    : fakeNewsPrediction.label;
-  if (fakeNewsLabel) {
-    updated.fakeNews = fakeNewsLabel;
-    updated.modelFakeNews = fakeNewsLabel;
-    updated.fakeNewsConfidence = fakeNewsPrediction.confidence ?? pred.fakeNewsConfidence;
-    updated.fakeNewsProbs = fakeNewsPrediction.probabilities ?? pred.fakeNewsProbs;
-    updated.isFakeNews = fakeNewsLabel === 'Fake News';
-  }
-
   const clickbaitPrediction = pred.clickbait && typeof pred.clickbait === 'object'
     ? pred.clickbait
     : pred;
@@ -63,6 +49,7 @@ function attachModelReliability(article, pred) {
     updated.reliabilityScore = reliabilityPrediction.reliabilityScore;
     updated.truthfulnessLabel = reliabilityPrediction.truthfulnessLabel;
     updated.metaProbs = reliabilityPrediction.probabilities ?? pred.metaProbs;
+    updated.reliabilityAvailable = reliabilityPrediction.available !== false;
   }
 
   return updated;

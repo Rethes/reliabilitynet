@@ -8,7 +8,7 @@ The project is split into three runtime services:
 
 - Frontend: React + Vite app in the root project and `src/` directory
 - Auth backend: Express app in `server/` for login, profile management, and saved articles
-- ML backend: Flask service in `model_server.py` for sentiment, fake-news, and clickbait predictions
+- ML backend: Flask service in `model_server.py` for sentiment, clickbait, and reliability predictions
 - News proxy: lightweight Node service that forwards Webz.io requests
 
 ## Tech stack
@@ -32,7 +32,7 @@ ReliabilityNet/
 ├── vite.config.js                 # Vite frontend config
 ├── index.html                     # Main HTML shell for the React app
 ├── proxy-server.js                # Local Webz.io proxy for fetching news
-├── model_server.py                # Flask ML API for sentiment, fake news, and clickbait
+├── model_server.py                # Flask ML API for sentiment, clickbait, and reliability
 ├── requirements.txt               # Python dependencies for the model server
 ├── start-all.sh                   # Starts proxy, backend, ML API, and frontend together
 ├── server/
@@ -51,11 +51,9 @@ ReliabilityNet/
 │   └── utils/                     # Helper functions and formatting utilities
 ├── meta_logistic_regression_model/ # Meta model used for combined reliability scoring
 ├── roberta_sentiment_model/       # Local sentiment model checkpoint
-├── roberta_large_fake_news_model/ # Local fake-news detection model checkpoint
 ├── roberta_large_clickbait_model/ # Local clickbait detection model checkpoint
 ├── model_env/                     # Python virtual environment for model inference
 ├── test_clickbait_server.py       # Smoke test for clickbait endpoint
-├── test_fake_news_server.py       # Smoke test for fake-news endpoint
 ├── test_reliability_server.py     # Smoke test for reliability endpoint
 ├── test_sentiment_server.py       # Smoke test for sentiment endpoint
 └── node_modules/                  # Installed frontend dependencies
@@ -158,7 +156,6 @@ Then open http://localhost:5173
 The Python service in `model_server.py` loads the project’s local Hugging Face checkpoints for:
 
 - sentiment detection
-- fake-news detection
 - clickbait detection
 - meta-classification aggregation
 
@@ -167,7 +164,6 @@ Key endpoints include:
 - `GET /`
 - `GET /health`
 - `POST /predict/sentiment`
-- `POST /predict/fake-news`
 - `POST /predict/clickbait`
 - `POST /predict/reliability`
 
@@ -194,7 +190,6 @@ The backend in `server/index.js` provides:
 ### Reliability signals
 
 - sentiment classification
-- fake-news detection
 - clickbait detection
 - reliability scores on article cards
 
