@@ -1,7 +1,7 @@
 # ReliabilityNet - Local Auth Setup
 
 This project includes a local Express backend for user authentication and server-backed saved articles.
-The application also uses a Python model server for sentiment, fake-news, clickbait, and reliability analysis.
+The application also uses a Python model server for sentiment, clickbait, and reliability analysis.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ The application also uses a Python model server for sentiment, fake-news, clickb
 | Vite dev server | 5173 | React frontend |
 | `proxy-server.js` | 3131 | webz.io API proxy (unchanged) |
 | `server/index.js` | 4000 | Auth + saved articles |
-| `model_server.py` | 5001 | Sentiment, fake-news, clickbait, and reliability predictions |
+| `model_server.py` | 5001 | Sentiment, clickbait, and reliability predictions |
 
 ---
 

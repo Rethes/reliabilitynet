@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styles from './ArticleModal.module.css';
 import ReliabilityScore from './ReliabilityScore';
-import FakeNewsBadge from './FakeNewsBadge';
 import ClickbaitBadge from './ClickbaitBadge';
 import SentimentBadge from './SentimentBadge';
 import { useAppContext } from '../context/AppContext';
@@ -75,7 +74,6 @@ export default function ArticleModal({ article, onClose }) {
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}
             />
-            <FakeNewsBadge article={article} />
             <ClickbaitBadge article={article} />
             <button
               className={`${styles.reactBtn} ${isSaved ? styles.saved : ''}`}

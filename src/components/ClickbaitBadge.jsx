@@ -6,11 +6,20 @@ export default function ClickbaitBadge({ article }) {
   const label = getClickbaitLabel(article);
   const isClickbait = label === 'Clickbait' || (/clickbait/i.test(label) && !/not/i.test(label));
   const confidence = article?.clickbaitConfidence;
+  const probabilities = article?.clickbaitProbs;
   const isMl = Boolean(article?.clickbait || article?.modelClickbait || confidence);
   const confPct = typeof confidence === 'number' ? (confidence * 100).toFixed(2) : null;
-  const tooltipText = isMl
+  const tooltipLines = [isMl
     ? `RoBERTa ML Model: ${label}${confPct !== null ? ` (${confPct}% confidence)` : ''}`
-    : isClickbait ? 'Flagged as potential clickbait (heuristic)' : 'Likely not clickbait (heuristic)';
+    : isClickbait ? 'Flagged as potential clickbait (heuristic)' : 'Likely not clickbait (heuristic)'];
+
+  if (typeof probabilities?.Clickbait === 'number') {
+    tooltipLines.push(`Clickbait: ${(probabilities.Clickbait * 100).toFixed(2)}%`);
+  }
+  if (typeof probabilities?.['Not Clickbait'] === 'number') {
+    tooltipLines.push(`Not Clickbait: ${(probabilities['Not Clickbait'] * 100).toFixed(2)}%`);
+  }
+  const tooltipText = tooltipLines.join('\n');
 
   return (
     <span

@@ -46,10 +46,6 @@ export function getReliabilityScore(article) {
     return article.reliabilityScore;
   }
 
-  if (article.fakeNewsProbs && typeof article.fakeNewsProbs['Real News'] === 'number') {
-    return Math.round(article.fakeNewsProbs['Real News'] * 100);
-  }
-
   const stored = getFromStorage(`rel_${article.uuid}`);
   if (stored) return stored;
 
@@ -68,26 +64,6 @@ export function getReliabilityColor(score) {
   if (score >= 80) return 'var(--green)';
   if (score >= 65) return 'var(--gold2)';
   return 'var(--red)';
-}
-
-// Fake News detection (prioritizes RoBERTa ML model prediction, with fallback)
-export function getFakeNewsLabel(article) {
-  if (!article) return 'Real News';
-
-  if (article.fakeNews) return article.fakeNews;
-  if (article.modelFakeNews) return article.modelFakeNews;
-
-  const stored = getFromStorage(`fakenews_${article.uuid}`);
-  if (stored !== null) return stored;
-
-  const title = (article.title || '').toLowerCase();
-  const suspiciousSignals = [
-    'you won\'t believe', 'shocking secret', 'exposed viral',
-    'omg insane', 'mind-blowing truth', 'secret cure',
-    'illuminati', 'alien conspiracy'
-  ];
-  const isFake = suspiciousSignals.some(s => title.includes(s));
-  return isFake ? 'Fake News' : 'Real News';
 }
 
 // Clickbait detection (prioritizes RoBERTa ML model prediction, with fallback)

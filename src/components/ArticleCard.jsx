@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import styles from './ArticleCard.module.css';
 import ReliabilityScore from './ReliabilityScore';
-import FakeNewsBadge from './FakeNewsBadge';
 import ClickbaitBadge from './ClickbaitBadge';
 import SentimentBadge from './SentimentBadge';
 import { useAppContext } from '../context/AppContext';
@@ -75,7 +74,7 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
           <span className={styles.timeBadge}>{timeAgo}</span>
         </div>
 
-        {/* Reliability + Sentiment + Fake News row */}
+        {/* Reliability, sentiment, and clickbait signals */}
         <div className={styles.signalsContainer}>
           <div className={styles.signalsRow}>
             <ReliabilityScore article={article} />
@@ -88,7 +87,6 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}
             />
-            <FakeNewsBadge article={article} />
             <ClickbaitBadge article={article} />
           </div>
         </div>
