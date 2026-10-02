@@ -76,6 +76,24 @@ body::before {
   50% { opacity: 0.6; }
 }
 
+@keyframes model-pending-spin { to { transform: rotate(360deg); } }
+
+.model-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  color: var(--text3);
+}
+
+.model-pending-spinner {
+  width: 0.75em;
+  height: 0.75em;
+  border: 1px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: model-pending-spin 0.7s linear infinite;
+}
+
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 @keyframes modal-up {

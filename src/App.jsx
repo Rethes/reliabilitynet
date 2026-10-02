@@ -213,8 +213,6 @@ function AppInner() {
 
             {/* Grid / error / skeletons */}
             <div className={styles.grid}>
-              {isLoading && !progress && Array(6).fill(0).map((_, i) => <SkeletonCard key={i} />)}
-              {progress && Array(6).fill(0).map((_, i) => <SkeletonCard key={i} />)}
               {!isLoading && error && renderError()}
               {!isLoading && !error && displayedPageArticles.length === 0 && allArticles.length > 0 && (
                 <div className={styles.stateBox}>
@@ -223,7 +221,7 @@ function AppInner() {
                   <div className={styles.stateMsg}>Try different keywords, filters, or a broader date range.</div>
                 </div>
               )}
-              {!isLoading && !error && displayedPageArticles.map((article, i) => (
+              {displayedPageArticles.map((article, i) => (
                 <ArticleCard
                   key={`${filters.category}:${article.uuid || article.url || i}`}
                   article={article}
@@ -233,6 +231,7 @@ function AppInner() {
                   selectedCategory={filters.category}
                 />
               ))}
+              {isLoading && Array(6).fill(0).map((_, i) => <SkeletonCard key={`loading-${i}`} />)}
             </div>
 
             <Pagination

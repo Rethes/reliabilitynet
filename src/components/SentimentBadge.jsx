@@ -20,7 +20,7 @@ function getProbabilityLabel(sentiment, probs, confidence) {
   return typeof value === 'number' ? ` (${(value * 100).toFixed(2)}%)` : '';
 }
 
-export default function SentimentBadge({ modelSentiment, confidence, probs }) {
+export default function SentimentBadge({ modelSentiment, confidence, probs, isPending }) {
   const modelValue = modelSentiment ?? null;
   const modelMeta = getSentimentMeta(modelValue);
   const modelPctStr = getProbabilityLabel(modelValue, probs, confidence);
@@ -38,7 +38,9 @@ export default function SentimentBadge({ modelSentiment, confidence, probs }) {
   return (
     <div className={styles.group} title={titleStr.join('\n')}>
       <span className={`${styles.badge} ${modelMeta?.cls || styles.neutral}`}>
-        Sentiment: {modelMeta ? `${modelMeta.label}${modelPctStr}` : 'Unavailable'}
+        Sentiment: {isPending
+          ? <span className="model-pending"><span className="model-pending-spinner" />Analyzing</span>
+          : modelMeta ? `${modelMeta.label}${modelPctStr}` : 'Unavailable'}
       </span>
     </div>
   );
