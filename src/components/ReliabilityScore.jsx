@@ -10,9 +10,12 @@ import { getReliabilityScore, getReliabilityColor } from '../utils/helpers';
 export default function ReliabilityScore({ article }) {
   const score = getReliabilityScore(article);
   const available = score !== null;
+  const pending = article?.modelAnalysisStatus === 'pending';
   const color = available ? getReliabilityColor(score) : 'var(--text3)';
   const metaLabel = article?.truthfulnessLabel ? ` (${article.truthfulnessLabel})` : '';
-  const tooltip = available
+  const tooltip = pending
+    ? 'Reliability model is analyzing this article'
+    : available
     ? `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`
     : 'Meta-classifier reliability: Unavailable';
 
@@ -32,7 +35,9 @@ export default function ReliabilityScore({ article }) {
         />
       </svg>
       <div className={styles.label}>
-        <span className={styles.pct} style={{ color }}>{available ? `${score}%` : 'Unavailable'}</span>
+        <span className={styles.pct} style={{ color }}>
+          {pending ? <span className="model-pending"><span className="model-pending-spinner" />Analyzing</span> : available ? `${score}%` : 'Unavailable'}
+        </span>
         <span className={styles.txt}>Reliability</span>
       </div>
     </div>

@@ -97,6 +97,11 @@ export function useNews() {
     setCurrentPage(1);
   }, []);
 
+  const refreshArticles = useCallback((articles, srcs, overrideFilters) => {
+    const f = overrideFilters || filtersRef.current;
+    setFilteredArticles(filterArticles(articles, f, srcs));
+  }, []);
+
   const loadNews = useCallback(async (filters) => {
     const requestId = ++loadRequestRef.current;
     if (!API_KEY) {
@@ -112,12 +117,28 @@ export function useNews() {
     setError(null);
     setAllArticles([]);
     setFilteredArticles([]);
+    setCurrentPage(1);
     filtersRef.current = filters;
+    const articlesByKey = new Map();
+
+    const publishArticleBatch = batch => {
+      batch.forEach(article => {
+        const key = getArticleKey(article);
+        const previous = articlesByKey.get(key);
+        articlesByKey.set(key, previous ? { ...previous, ...article } : article);
+      });
+      const receivedArticles = [...articlesByKey.values()];
+      setAllArticles(receivedArticles);
+      refreshArticles(receivedArticles, new Set(), filtersRef.current);
+    };
 
     try {
       const articles = await fetchNews(API_KEY, filters, (prog) => {
         if (requestId !== loadRequestRef.current) return;
         setProgress(prog);
+      }, (batch) => {
+        if (requestId !== loadRequestRef.current) return;
+        publishArticleBatch(batch);
       });
 
       if (requestId !== loadRequestRef.current) return;
@@ -134,7 +155,7 @@ export function useNews() {
         setProgress(null);
       }
     }
-  }, [applyFilters]);
+  }, [applyFilters, refreshArticles]);
 
   const updateFilters = useCallback((newFilters, articles, srcs) => {
     filtersRef.current = newFilters;

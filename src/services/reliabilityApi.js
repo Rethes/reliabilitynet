@@ -21,6 +21,20 @@ function withEmptyModelOutputs(article) {
   };
 }
 
+export function markModelPending(article) {
+  return {
+    ...withEmptyModelOutputs(article),
+    modelAnalysisStatus: 'pending',
+  };
+}
+
+function publishBatches(articles, onBatch) {
+  for (let start = 0; start < articles.length; start += ANALYSIS_BATCH_SIZE) {
+    onBatch?.(articles.slice(start, start + ANALYSIS_BATCH_SIZE));
+  }
+  return articles;
+}
+
 export function attachModelSentiment(article, pred) {
   if (!article) return article;
 
@@ -77,14 +91,14 @@ function attachModelReliability(article, pred) {
   return updated;
 }
 
-export async function batchPredictReliability(articles) {
+export async function batchPredictReliability(articles, onBatch) {
   if (!Array.isArray(articles) || articles.length === 0) return articles;
 
   try {
     const response = await fetch(`${RELIABILITY_API}/health`, { signal: AbortSignal.timeout(1500) });
     if (!response.ok || (await response.json()).status !== 'healthy') {
       console.warn('[Reliability API] Model server is offline. Skipping reliability analysis.');
-      return articles.map(withEmptyModelOutputs);
+      return publishBatches(articles.map(withEmptyModelOutputs), onBatch);
     }
 
     const enriched = [];
@@ -106,13 +120,17 @@ export async function batchPredictReliability(articles) {
 
         if (!predictionResponse.ok) {
           console.error(`[Reliability API] HTTP error ${predictionResponse.status}`);
-          enriched.push(...batch.map(withEmptyModelOutputs));
+          const unavailableBatch = batch.map(withEmptyModelOutputs);
+          enriched.push(...unavailableBatch);
+          onBatch?.(unavailableBatch);
           continue;
         }
 
         const data = await predictionResponse.json();
         if (!data.success || !Array.isArray(data.predictions)) {
-          enriched.push(...batch.map(withEmptyModelOutputs));
+          const unavailableBatch = batch.map(withEmptyModelOutputs);
+          enriched.push(...unavailableBatch);
+          onBatch?.(unavailableBatch);
           continue;
         }
 
@@ -122,20 +140,24 @@ export async function batchPredictReliability(articles) {
             .map(prediction => [String(prediction.article_id), prediction]),
         );
 
-        enriched.push(...batch.map((article, index) => {
+        const enrichedBatch = batch.map((article, index) => {
           const articleId = article.uuid || article.url;
           const prediction = predictionsById.get(String(articleId)) || data.predictions[index];
           return attachModelReliability(attachModelSentiment(article, prediction), prediction);
-        }));
+        });
+        enriched.push(...enrichedBatch);
+        onBatch?.(enrichedBatch);
       } catch (err) {
         console.error('[Reliability API] Failed to analyze batch:', err.message);
-        enriched.push(...batch.map(withEmptyModelOutputs));
+        const unavailableBatch = batch.map(withEmptyModelOutputs);
+        enriched.push(...unavailableBatch);
+        onBatch?.(unavailableBatch);
       }
     }
 
     return enriched;
   } catch (err) {
     console.error('[Reliability API] Failed to analyze articles:', err.message);
-    return articles.map(withEmptyModelOutputs);
+    return publishBatches(articles.map(withEmptyModelOutputs), onBatch);
   }
 }

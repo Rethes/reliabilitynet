@@ -71,6 +71,7 @@ export default function ArticleModal({ article, onClose }) {
               modelSentiment={article.modelSentiment}
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}
+              isPending={article.modelAnalysisStatus === 'pending'}
             />
             <ClickbaitBadge article={article} />
             <button

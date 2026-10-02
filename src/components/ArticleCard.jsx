@@ -84,6 +84,7 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
               modelSentiment={sentiment}
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}
+              isPending={article.modelAnalysisStatus === 'pending'}
             />
             <ClickbaitBadge article={article} />
           </div>

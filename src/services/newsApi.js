@@ -1,4 +1,4 @@
-import { batchPredictReliability } from './reliabilityApi';
+import { batchPredictReliability, markModelPending } from './reliabilityApi';
 
 const PROXY_BASE = 'http://localhost:3131';
 const DEFAULT_Q = 'news';
@@ -29,7 +29,7 @@ async function proxyFetchNext(nextPath) {
   return res.json();
 }
 
-export async function fetchNews(apiKey, filters = {}, onProgress) {
+export async function fetchNews(apiKey, filters = {}, onProgress, onArticlesBatch) {
   if (!apiKey) throw new Error('NO_API_KEY');
 
   const q = filters.search || DEFAULT_Q;
@@ -37,25 +37,48 @@ export async function fetchNews(apiKey, filters = {}, onProgress) {
   if (filters.dateFrom) params.ts = new Date(filters.dateFrom).getTime();
 
   let collected = [];
+  let analyzedArticles = [];
+  let analyzedCount = 0;
+  let analysisQueue = Promise.resolve();
   onProgress?.({ text: `Fetching articles… 0 / ${TARGET_ARTICLES}`, pct: 0 });
+
+  const queueAnalysis = (posts) => {
+    onArticlesBatch?.(posts.map(markModelPending));
+    analysisQueue = analysisQueue.then(async () => {
+      const predictions = await batchPredictReliability(posts);
+      const completedBatch = predictions.map(article => ({
+        ...article,
+        modelAnalysisStatus: 'complete',
+      }));
+      analyzedArticles.push(...completedBatch);
+      analyzedCount += completedBatch.length;
+      onArticlesBatch?.(completedBatch);
+      onProgress?.({
+        text: `Analyzed ${analyzedCount} of ${collected.length} fetched articles`,
+        pct: 95,
+      });
+    });
+  };
 
   let json = await proxyFetch(apiKey, params);
   if (!Array.isArray(json.posts)) return [];
   collected.push(...json.posts);
+  queueAnalysis(json.posts);
   onProgress?.({ text: `Fetching articles… ${collected.length} / ${TARGET_ARTICLES}`, pct: (collected.length / TARGET_ARTICLES) * 100 });
 
   while (collected.length < TARGET_ARTICLES && json.next && json.moreResultsAvailable > 0) {
     json = await proxyFetchNext(json.next);
     if (!Array.isArray(json.posts) || json.posts.length === 0) break;
     collected.push(...json.posts);
+    queueAnalysis(json.posts);
     const pct = Math.min((collected.length / TARGET_ARTICLES) * 100, 100);
     onProgress?.({ text: `Fetching articles… ${collected.length} / ${TARGET_ARTICLES}`, pct });
   }
 
-  onProgress?.({ text: 'Running analysis…', pct: 95 });
-  const enrichedArticles = await batchPredictReliability(collected);
+  onProgress?.({ text: `Analyzing ${analyzedCount} of ${collected.length} articles…`, pct: 95 });
+  await analysisQueue;
 
   onProgress?.(null);
-  return enrichedArticles;
+  return analyzedArticles;
 }
 
