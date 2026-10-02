@@ -4,14 +4,15 @@ import { getClickbaitLabel } from '../utils/helpers';
 
 export default function ClickbaitBadge({ article }) {
   const label = getClickbaitLabel(article);
-  const isClickbait = label === 'Clickbait' || (/clickbait/i.test(label) && !/not/i.test(label));
+  const isAvailable = typeof label === 'string' && label.length > 0;
+  const isClickbait = isAvailable && (label === 'Clickbait' || (/clickbait/i.test(label) && !/not/i.test(label)));
   const confidence = article?.clickbaitConfidence;
   const probabilities = article?.clickbaitProbs;
-  const isMl = Boolean(article?.clickbait || article?.modelClickbait || confidence);
+  const isMl = isAvailable;
   const confPct = typeof confidence === 'number' ? (confidence * 100).toFixed(2) : null;
-  const tooltipLines = [isMl
+  const tooltipLines = [isAvailable
     ? `RoBERTa ML Model: ${label}${confPct !== null ? ` (${confPct}% confidence)` : ''}`
-    : isClickbait ? 'Flagged as potential clickbait (heuristic)' : 'Likely not clickbait (heuristic)'];
+    : 'Clickbait model: Unavailable'];
 
   if (typeof probabilities?.Clickbait === 'number') {
     tooltipLines.push(`Clickbait: ${(probabilities.Clickbait * 100).toFixed(2)}%`);
@@ -23,11 +24,11 @@ export default function ClickbaitBadge({ article }) {
 
   return (
     <span
-      className={`${styles.badge} ${isClickbait ? styles.yes : styles.no} ${isMl ? styles.mlBadge : ''}`}
+      className={`${styles.badge} ${isAvailable ? (isClickbait ? styles.yes : styles.no) : styles.unavailable} ${isMl ? styles.mlBadge : ''}`}
       title={tooltipText}
     >
-      {isClickbait ? '⚠ Clickbait' : '✓ Not Clickbait'}
-      {confPct !== null && (
+      {isAvailable ? (isClickbait ? '⚠ Clickbait' : '✓ Not Clickbait') : 'Clickbait: Unavailable'}
+      {isAvailable && confPct !== null && (
         <span className={styles.confidence}>{confPct}%</span>
       )}
     </span>

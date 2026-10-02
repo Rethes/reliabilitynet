@@ -9,11 +9,12 @@ import { getReliabilityScore, getReliabilityColor } from '../utils/helpers';
  */
 export default function ReliabilityScore({ article }) {
   const score = getReliabilityScore(article);
-  const color = getReliabilityColor(score);
+  const available = score !== null;
+  const color = available ? getReliabilityColor(score) : 'var(--text3)';
   const metaLabel = article?.truthfulnessLabel ? ` (${article.truthfulnessLabel})` : '';
-  const tooltip = article?.reliabilityAvailable === false
-    ? `Meta-classifier unavailable; neutral fallback score: ${score}%`
-    : `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`;
+  const tooltip = available
+    ? `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`
+    : 'Meta-classifier reliability: Unavailable';
 
   return (
     <div className={styles.wrap} title={tooltip}>
@@ -26,12 +27,12 @@ export default function ReliabilityScore({ article }) {
           r="15.9"
           style={{
             stroke: color,
-            strokeDasharray: `${score} ${100 - score}`,
+            strokeDasharray: `${score ?? 0} ${100 - (score ?? 0)}`,
           }}
         />
       </svg>
       <div className={styles.label}>
-        <span className={styles.pct} style={{ color }}>{score}%</span>
+        <span className={styles.pct} style={{ color }}>{available ? `${score}%` : 'Unavailable'}</span>
         <span className={styles.txt}>Reliability</span>
       </div>
     </div>

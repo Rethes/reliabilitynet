@@ -359,7 +359,12 @@ def predict_reliability():
             meta_prediction = (
                 meta_results[i]
                 if meta_results and i < len(meta_results)
-                else unavailable_reliability_results(1)[0]
+                else {
+                    "reliabilityScore": None,
+                    "truthfulnessLabel": None,
+                    "metaProbabilities": None,
+                    "available": False
+                }
             )
             meta_result = {
                 "reliabilityScore": meta_prediction["reliabilityScore"],

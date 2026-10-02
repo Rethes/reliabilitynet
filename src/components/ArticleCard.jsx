@@ -21,7 +21,7 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
   ));
   const category = matchingCategory ? selectedCategory : cats[0] || '';
   const img = article.thread?.main_image || '';
-  const sentiment = article.modelSentiment || article.sentiment || '';
+  const sentiment = article.modelSentiment;
 
   const reaction = state.reactions[id] || { likes: 0, dislikes: 0, userReaction: null };
   const isSaved = !!state.savedArticles[id];
@@ -81,9 +81,7 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
           </div>
           <div className={styles.signalsRow}>
             <SentimentBadge
-              sentiment={sentiment}
-              apiSentiment={article.apiSentiment}
-              modelSentiment={article.modelSentiment || article.sentiment}
+              modelSentiment={sentiment}
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}
             />
