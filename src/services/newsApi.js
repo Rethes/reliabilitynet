@@ -5,6 +5,14 @@ const DEFAULT_Q = 'news';
 const TARGET_ARTICLES = 100;
 const BATCH_SIZE = 10;
 
+function isEnglishArticle(article) {
+  const language = String(article?.language || '').trim().toLowerCase();
+  return language === 'english'
+    || language === 'en'
+    || language === 'eng'
+    || language.startsWith('en-');
+}
+
 export async function checkProxy() {
   try {
     const r = await fetch(`${PROXY_BASE}/ping`, { signal: AbortSignal.timeout(1500) });
@@ -62,15 +70,17 @@ export async function fetchNews(apiKey, filters = {}, onProgress, onArticlesBatc
 
   let json = await proxyFetch(apiKey, params);
   if (!Array.isArray(json.posts)) return [];
-  collected.push(...json.posts);
-  queueAnalysis(json.posts);
+  const englishPosts = json.posts.filter(isEnglishArticle);
+  collected.push(...englishPosts);
+  queueAnalysis(englishPosts);
   onProgress?.({ text: `Fetching articles… ${collected.length} / ${TARGET_ARTICLES}`, pct: (collected.length / TARGET_ARTICLES) * 100 });
 
   while (collected.length < TARGET_ARTICLES && json.next && json.moreResultsAvailable > 0) {
     json = await proxyFetchNext(json.next);
     if (!Array.isArray(json.posts) || json.posts.length === 0) break;
-    collected.push(...json.posts);
-    queueAnalysis(json.posts);
+    const englishPage = json.posts.filter(isEnglishArticle);
+    collected.push(...englishPage);
+    queueAnalysis(englishPage);
     const pct = Math.min((collected.length / TARGET_ARTICLES) * 100, 100);
     onProgress?.({ text: `Fetching articles… ${collected.length} / ${TARGET_ARTICLES}`, pct });
   }
