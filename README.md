@@ -53,9 +53,7 @@ ReliabilityNet/
 ├── roberta_sentiment_model/       # Local sentiment model checkpoint
 ├── roberta_large_clickbait_model/ # Local clickbait detection model checkpoint
 ├── model_env/                     # Python virtual environment for model inference
-├── test_clickbait_server.py       # Smoke test for clickbait endpoint
-├── test_reliability_server.py     # Smoke test for reliability endpoint
-├── test_sentiment_server.py       # Smoke test for sentiment endpoint
+├── tests/                         # Smoke test for flask endpoint
 └── node_modules/                  # Installed frontend dependencies
 ```
 
