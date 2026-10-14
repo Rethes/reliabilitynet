@@ -1,3 +1,17 @@
+"""
+This file runs the ML API for ReliabilityNet.
+
+Purpose:
+- load the saved sentiment, clickbait, and reliability models from disk
+- receive article text from the frontend or proxy
+- run inference on that text
+- return structured prediction results as JSON
+
+The server is a small Flask service. It only loads pre-trained models and responds to HTTP
+requests. That makes it easy to call from the React frontend or any other
+service that needs article scores.
+"""
+
 import os
 import sys
 import torch
@@ -9,14 +23,26 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
+# -----------------------------------------------------------------------------
+# 1) Basic service configuration
+# -----------------------------------------------------------------------------
+# These environment variables let us point the service at different model folders
+# or change the port when running in different environments.
 SENTIMENT_MODEL_PATH = os.environ.get("SENTIMENT_MODEL_PATH", "./roberta_sentiment_model")
 CLICKBAIT_MODEL_PATH = os.environ.get("CLICKBAIT_MODEL_PATH", "./roberta_large_clickbait_model")
 META_MODEL_PATH = os.environ.get("META_MODEL_PATH", "./meta_logistic_regression_model")
 PORT = int(os.environ.get("PORT", 5001))
 
+# -----------------------------------------------------------------------------
+# 2) Model loading at startup
+# -----------------------------------------------------------------------------
+# The server loads all required models once when the script starts. This is more
+# efficient than loading models on every request.
 print(f"Loading RoBERTa Sentiment model from: {SENTIMENT_MODEL_PATH} ...")
 try:
+    # Tokenizer converts raw article text into the exact format the model expects.
     sentiment_tokenizer = AutoTokenizer.from_pretrained(SENTIMENT_MODEL_PATH)
+    # The actual transformer model produces class logits for sentiment predictions.
     sentiment_model = AutoModelForSequenceClassification.from_pretrained(SENTIMENT_MODEL_PATH)
     sentiment_model.eval()
     print("✓ Sentiment model and tokenizer loaded successfully!")
@@ -32,11 +58,15 @@ try:
     print("✓ Clickbait model and tokenizer loaded successfully!")
 except Exception as e:
     print(f"⚠️ Warning: Could not load Clickbait model from {CLICKBAIT_MODEL_PATH}: {e}")
+    # The rest of the app can still run if the clickbait model is unavailable, but
+    # clickbait predictions will be missing instead of causing startup failure.
     clickbait_tokenizer = None
     clickbait_model = None
 
 print(f"Loading Logistic Regression Meta-Classifier model from: {META_MODEL_PATH} ...")
 try:
+    # The meta-classifier is a saved scikit-learn pipeline: it combines text features
+    # and model probabilities to estimate a final reliability score.
     meta_model = joblib.load(os.path.join(META_MODEL_PATH, "logistic_regression_metaclassifier.joblib"))
     meta_scaler = joblib.load(os.path.join(META_MODEL_PATH, "meta_feature_scaler.joblib"))
     meta_tfidf = joblib.load(os.path.join(META_MODEL_PATH, "tfidf_vectorizer.joblib"))
@@ -49,7 +79,12 @@ except Exception as e:
     meta_tfidf = None
     meta_label_encoder = None
 
-# Label mapping for Sentiment (0: negative, 1: neutral, 2: positive)
+# -----------------------------------------------------------------------------
+# 3) Label mappings used to convert model indexes into readable names
+# -----------------------------------------------------------------------------
+# Transformer classification models internally store class ids like 0, 1, 2.
+# We map those to human-friendly strings so the frontend receives readable values
+# such as "positive" or "Clickbait" rather than raw numeric labels.
 SENTIMENT_LABEL_MAP = {
     0: "negative",
     1: "neutral",
@@ -59,7 +94,6 @@ SENTIMENT_LABEL_MAP = {
     "LABEL_2": "positive"
 }
 
-# Label mapping for Clickbait (0: Not Clickbait, 1: Clickbait)
 CLICKBAIT_LABEL_MAP = {
     0: "Not Clickbait",
     1: "Clickbait",
@@ -67,20 +101,73 @@ CLICKBAIT_LABEL_MAP = {
     "LABEL_1": "Clickbait"
 }
 
+# This reads the label dictionary that comes with the sentiment model config and
+# uses it when the model provides labels in a format like "LABEL_0".
 id2label_sentiment = getattr(sentiment_model.config, 'id2label', {})
 
+
+def build_article_text(article):
+    """
+    Build the text sent to a model from one article object.
+
+    Article APIs usually provide a title and body separately, so the title is
+    prepended to the body. Some callers instead provide text that already starts
+    with the title; in that case, return it as-is to avoid counting the title twice.
+    """
+    title = article.get('title', '').strip()
+    body = (article.get('description', '') or article.get('text', '') or '').strip()
+
+    if title and body[:len(title)].casefold() == title.casefold():
+        remainder = body[len(title):]
+        if not remainder or remainder[0].isspace() or remainder[0] in '.:!?;-':
+            return body
+
+    return f"{title}. {body}".strip()
+
+
 def get_sentiment_label(idx):
+    """
+    Convert a sentiment class index into a readable label.
+
+    Inputs:
+        idx: integer class index such as 0, 1, or 2.
+
+    Output:
+        A human-readable label like "negative", "neutral", or "positive".
+    """
     raw_label = id2label_sentiment.get(idx, id2label_sentiment.get(str(idx), idx))
     return SENTIMENT_LABEL_MAP.get(raw_label, SENTIMENT_LABEL_MAP.get(idx, str(raw_label).lower()))
 
+
 def get_clickbait_label(idx):
+    """
+    Return a readable clickbait label from a class index.
+
+    Inputs:
+        idx: integer index from the clickbait model output.
+
+    Output:
+        "Not Clickbait" or "Clickbait".
+    """
     return CLICKBAIT_LABEL_MAP.get(idx, "Clickbait" if idx == 1 else "Not Clickbait")
 
+# -----------------------------------------------------------------------------
+# 4) Flask application setup
+# -----------------------------------------------------------------------------
+# Flask is the HTTP layer. It exposes routes that the frontend hits to ask for
+# predictions. CORS is enabled so the browser can call this local API.
 app = Flask(__name__)
 CORS(app)
 
+
 @app.route('/', methods=['GET'])
 def index():
+    """
+    Root endpoint that shows the available API routes.
+
+    Input: no request body.
+    Output: a JSON object describing the service and supported endpoints.
+    """
     return jsonify({
         "status": "online",
         "service": "RoBERTa ReliabilityNet Intelligence API (Sentiment & Clickbait)",
@@ -94,8 +181,15 @@ def index():
         }
     })
 
+
 @app.route('/health', methods=['GET'])
 def health():
+    """
+    Health check used by the app and deployment scripts to confirm the API is alive.
+
+    Input: none.
+    Output: JSON containing service status and whether each model was loaded.
+    """
     return jsonify({
         "status": "healthy",
         "service": "ReliabilityNet API",
@@ -121,6 +215,12 @@ def health():
 
     })
 
+# -----------------------------------------------------------------------------
+# 5) Mapping for the final truthfulness score used in the meta-classifier
+# -----------------------------------------------------------------------------
+# The meta-classifier predicts among labels like "pants-fire", "false", etc.
+# Each label is mapped to a numeric weight from 0 to 1, and then converted into a
+# 0-to-100 reliability score for the UI.
 TRUTHFULNESS_WEIGHTS = {
     'pants-fire': 0.0,
     'false': 0.15,
@@ -133,19 +233,45 @@ TRUTHFULNESS_WEIGHTS = {
 
 def predict_reliability_meta(texts, base_probs_list):
     """
-    Passes base model probabilities (clickbait, sentiment) and article text
-    into the Logistic Regression Meta-Classifier to calculate a 0-100 Reliability Score.
+    Combine text features and base model probabilities into a final reliability score.
+
+    Inputs:
+        texts: list of article strings used for TF-IDF feature extraction.
+        base_probs_list: matrix of per-article base features, typically including
+            sentiment probabilities and clickbait probability values.
+
+    Output:
+        A list of result dictionaries with:
+            - reliabilityScore: overall 0-100 score
+            - truthfulnessLabel: top predicted truthfulness class
+            - metaProbabilities: per-class probability breakdown
+            - available: whether the model output is valid
+
+    Important logic:
+        - The saved logistic regression model expects a combined feature vector.
+        - We create text features with the saved TF-IDF vectorizer.
+        - We create numeric features from sentiment + clickbait probabilities.
+        - We pad feature dimensions if needed to match the model's training shape.
+        - We compute class probabilities and turn them into a weighted score.
     """
     if meta_model is None or meta_scaler is None or meta_tfidf is None or meta_label_encoder is None:
         return None
 
     try:
         n = len(texts)
+
+        # The saved scaler expects a 2D array of numeric features.
         X_num_raw = np.array(base_probs_list, dtype=np.float32)
         X_num_scaled = meta_scaler.transform(X_num_raw)
 
+        # TF-IDF text features capture the article language itself and are used by
+        # the saved meta-classifier alongside the probability features.
         X_tfidf = meta_tfidf.transform(texts)
 
+        # The model was trained with a fixed number of expected input features.
+        # Depending on how the pipeline was saved, the current feature count may be
+        # slightly different from the model's expected count. We add zero columns if
+        # needed so the saved model receives the shape it expects.
         target_dim = getattr(meta_model, 'n_features_in_', 15512)
         current_dim = X_tfidf.shape[1] + X_num_scaled.shape[1]
         remainder_dim = max(0, target_dim - current_dim)
@@ -163,9 +289,13 @@ def predict_reliability_meta(texts, base_probs_list):
         for i in range(n):
             probs_i = preds_proba[i]
             prob_dict = {str(classes[j]): round(float(probs_i[j]), 4) for j in range(len(classes))}
+
+            # Convert each truthfulness label into a score between 0 and 1, then scale
+            # it to 0-100 so the UI can display a simple reliability number.
             weighted_score = sum(prob_dict.get(cls, 0.0) * w for cls, w in TRUTHFULNESS_WEIGHTS.items()) * 100.0
             score = max(0, min(100, int(round(weighted_score))))
             top_class = str(classes[int(np.argmax(probs_i))])
+
             results.append({
                 "reliabilityScore": score,
                 "truthfulnessLabel": top_class,
@@ -181,6 +311,12 @@ def predict_reliability_meta(texts, base_probs_list):
 
 @app.route('/predict/sentiment', methods=['GET'])
 def predict_get():
+    """
+    Show a simple usage example for the sentiment endpoint.
+
+    Input: GET request with no payload.
+    Output: instructions and example JSON structure for clients.
+    """
     return jsonify({
         "message": "Send a POST request with JSON payload to analyze articles for sentiment only.",
         "example_payload": {
@@ -194,20 +330,30 @@ def predict_get():
 
 @app.route('/predict/sentiment', methods=['POST'])
 def predict_sentiment():
+    """
+    Predict sentiment for one or more article texts.
+
+    Input JSON can contain either:
+        - texts: list of raw text strings
+        - articles: list of article objects with title/description/text fields
+
+    Output JSON includes the model label, confidence score, probability breakdown,
+    and the article title or article id for each item.
+    """
     data = request.get_json(silent=True) or {}
     texts = data.get('texts', [])
     articles = data.get('articles', [])
 
+    # If the client sends article objects instead of plain text, we join the title
+    # and body so the model sees a complete text sample.
     if not texts and articles:
-        texts = [
-            f"{a.get('title', '')}. {a.get('description', '') or a.get('text', '') or ''}".strip()
-            for a in articles
-        ]
+        texts = [build_article_text(article) for article in articles]
 
     if not texts:
         return jsonify({"error": "No texts or articles provided for prediction"}), 400
 
     try:
+        # Tokenize the article text so the transformer can understand it.
         inputs = sentiment_tokenizer(
             texts,
             padding=True,
@@ -256,19 +402,27 @@ def predict_sentiment():
 
 @app.route('/predict/reliability', methods=['POST'])
 def predict_reliability():
+    """
+    Generate the full reliability assessment for each article.
+
+    This endpoint runs all three model steps in sequence for every article:
+    1) sentiment classification
+    2) clickbait classification
+    3) meta-classifier reliability scoring
+
+    Inputs:
+        JSON with either `texts` or `articles`.
+
+    Output:
+        A list of per-article objects containing sentiment, clickbait, and reliability
+        results together with confidence and probability details.
+    """
     data = request.get_json(silent=True) or {}
     texts = data.get('texts', [])
     articles = data.get('articles', [])
-    descriptions = [
-        a.get('description', '') or a.get('text', '') or ''
-        for a in articles
-    ] if articles else []
 
     if not texts and articles:
-        texts = [
-            f"{a.get('title', '')}. {descriptions[i]}".strip()
-            for i, a in enumerate(articles)
-        ]
+        texts = [build_article_text(article) for article in articles]
 
     titles = [articles[i].get('title', text) for i, text in enumerate(texts)] if articles else texts
 
@@ -276,7 +430,12 @@ def predict_reliability():
         return jsonify({"error": "No texts or articles provided for prediction"}), 400
 
     try:
-        # 1. Sentiment Inference
+        # ---------------------------------------------------------------------
+        # Step 1: sentiment inference
+        # ---------------------------------------------------------------------
+        # We classify the article text to understand whether it sounds negative,
+        # neutral, or positive. This becomes one of the features used in the final
+        # reliability estimate.
         inputs = sentiment_tokenizer(
             texts,
             padding=True,
@@ -289,7 +448,11 @@ def predict_reliability():
             sentiment_logits = outputs.logits
             sentiment_probs = F.softmax(sentiment_logits, dim=-1)
 
-        # 2. Clickbait Inference
+        # ---------------------------------------------------------------------
+        # Step 2: clickbait inference
+        # ---------------------------------------------------------------------
+        # The clickbait model is run on article titles, because titles are usually the
+        # strongest signal for sensational or misleading headline style.
         cb_probs_list = []
         if clickbait_model and clickbait_tokenizer:
             try:
@@ -307,7 +470,17 @@ def predict_reliability():
             except Exception as e:
                 print(f"Clickbait batch prediction error: {e}")
 
-        # 3. Construct the five-feature input expected by the saved meta-classifier.
+        # ---------------------------------------------------------------------
+        # Step 3: build the feature vector expected by the saved meta-classifier
+        # ---------------------------------------------------------------------
+        # The saved logistic regression model was trained using a fixed set of
+        # numeric features. We create a vector with:
+        #   - a placeholder auxiliary probability
+        #   - clickbait probability for the title being clickbait
+        #   - sentiment probabilities for negative, neutral, and positive
+        #
+        # This allows the meta-model to combine signal from multiple sources and
+        # estimate overall trustworthiness.
         base_probs_for_meta = []
         for i in range(len(texts)):
             s_probs = sentiment_probs[i].tolist()
@@ -320,7 +493,11 @@ def predict_reliability():
 
             base_probs_for_meta.append([auxiliary_prob, cb_cb_prob, sent_neg, sent_neu, sent_pos])
 
-        # 4. Meta-Classifier Reliability Prediction
+        # ---------------------------------------------------------------------
+        # Step 4: final reliability prediction via meta-classifier
+        # ---------------------------------------------------------------------
+        # This is the final layer that turns the base model predictions into a single
+        # reliability number and a truthfulness label.
         meta_results = predict_reliability_meta(texts, base_probs_for_meta)
 
         results = []
@@ -341,6 +518,8 @@ def predict_reliability():
                 "probabilities": s_prob_dict
             }
 
+            # Clickbait result is stored separately so the frontend can display a
+            # dedicated badge for that signal.
             clickbait_result = None
             if i < len(cb_probs_list):
                 cb_p = cb_probs_list[i]
@@ -356,6 +535,8 @@ def predict_reliability():
                     }
                 }
 
+            # The meta-model may fail or be unavailable. We use a fallback object so the
+            # app can still return the rest of the data without crashing.
             meta_prediction = (
                 meta_results[i]
                 if meta_results and i < len(meta_results)
@@ -374,9 +555,9 @@ def predict_reliability():
             }
 
             res = {
+                "uuid": articles[i].get("uuid") if articles and i < len(articles) else None,
                 "title": articles[i].get("title", text) if articles and i < len(articles) else text,
                 "text": text,
-                "description": descriptions[i] if i < len(descriptions) else "",
                 "sentiment": sentiment_result,
                 "clickbait": clickbait_result,
                 "reliability": meta_result
@@ -399,6 +580,16 @@ def predict_reliability():
 
 @app.route('/predict/clickbait', methods=['POST'])
 def predict_clickbait():
+    """
+    Predict clickbait status for article titles.
+
+    Input JSON may contain either:
+        - titles: list of headline strings
+        - articles: list of article objects with a title field
+
+    Output:
+        A list of per-title predictions with label, confidence, and probability map.
+    """
     if not clickbait_model or not clickbait_tokenizer:
         return jsonify({"error": "Clickbait model not loaded"}), 503
 
@@ -452,5 +643,7 @@ def predict_clickbait():
 
 
 if __name__ == '__main__':
+    # This block only runs when the file is started directly as a Python script.
+    # It starts the local Flask server for the app to call.
     print(f"\n🚀 RoBERTa Intelligence Server (Sentiment & Clickbait) starting on http://localhost:{PORT}\n")
     app.run(host='127.0.0.1', port=PORT, debug=False)

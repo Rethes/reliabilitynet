@@ -32,6 +32,10 @@ try:
     reliability = prediction.get("reliability")
     score = reliability.get("reliabilityScore") if reliability else None
 
+    if prediction.get("uuid") != article["uuid"]:
+        raise AssertionError(f"Unexpected article UUID: {prediction.get('uuid')}")
+    if "description" in prediction or not isinstance(prediction.get("text"), str):
+        raise AssertionError(f"Unexpected prediction text fields: {prediction}")
     if prediction.get("article_id") != article["uuid"]:
         raise AssertionError(f"Unexpected article id: {prediction.get('article_id')}")
     if not isinstance(score, int) or not 0 <= score <= 100:
