@@ -68,6 +68,9 @@ export default function ArticleModal({ article, onClose }) {
           <div className={styles.signalsRow}>
             <ReliabilityScore article={article} />
             <SentimentBadge
+              // apiSentiment={article.apiSentiment}
+              // apiProbs={article.apiSentimentProbs}
+              // apiConfidence={article.apiSentimentConfidence}
               modelSentiment={article.modelSentiment}
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}

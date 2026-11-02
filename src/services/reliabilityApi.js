@@ -1,10 +1,48 @@
 const RELIABILITY_API = 'http://localhost:5001';
 const ANALYSIS_BATCH_SIZE = 10;
 
+function getApiSentiment(article) {
+  const prediction = article.apiSentiment ?? article.sentiment ?? null;
+  if (!prediction) return { label: null, probabilities: null };
+
+  const titlePrediction = prediction.title && typeof prediction.title === 'object'
+    ? prediction.title
+    : null;
+  const label = typeof prediction === 'string'
+    ? prediction
+    : titlePrediction?.label
+      ?? titlePrediction?.sentiment
+      ?? (typeof prediction.title === 'string' ? prediction.title : null)
+      ?? prediction.label
+      ?? prediction.sentiment
+      ?? null;
+  const probabilities = article.apiSentimentProbs
+    ?? article.sentiment_stats
+    ?? article.sentimentStats
+    ?? prediction.probabilities
+    ?? titlePrediction?.probabilities
+    ?? prediction.title_stats
+    ?? prediction.sentiment_stats
+    ?? prediction.sentimentStats
+    ?? prediction.stats
+    ?? null;
+  const confidence = article.apiSentimentConfidence
+    ?? titlePrediction?.confidence
+    ?? titlePrediction?.probability
+    ?? prediction.confidence
+    ?? prediction.probability
+    ?? null;
+
+  return { label, probabilities, confidence };
+}
+
 function withEmptyModelOutputs(article) {
+  const apiSentiment = getApiSentiment(article);
   return {
     ...article,
-    apiSentiment: article.apiSentiment ?? article.sentiment ?? null,
+    apiSentiment: apiSentiment.label,
+    apiSentimentProbs: apiSentiment.probabilities,
+    apiSentimentConfidence: apiSentiment.confidence,
     sentiment: null,
     modelSentiment: null,
     sentimentConfidence: null,

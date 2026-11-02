@@ -81,6 +81,9 @@ export default function ArticleCard({ article, index, onOpen, isListView, select
           </div>
           <div className={styles.signalsRow}>
             <SentimentBadge
+              // apiSentiment={article.apiSentiment}
+              // apiProbs={article.apiSentimentProbs}
+              // apiConfidence={article.apiSentimentConfidence}
               modelSentiment={sentiment}
               confidence={article.sentimentConfidence}
               probs={article.sentimentProbs}

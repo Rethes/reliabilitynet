@@ -15,33 +15,58 @@ function getSentimentMeta(value) {
 
 function getProbabilityLabel(sentiment, probs, confidence) {
   const normalized = String(sentiment || '').trim().toLowerCase();
-  const probability = probs?.[normalized];
+  const probabilityKey = Object.keys(probs || {}).find(
+    key => key.trim().toLowerCase() === normalized,
+  );
+  const probability = probabilityKey ? probs[probabilityKey] : null;
   const value = typeof probability === 'number' ? probability : confidence;
-  return typeof value === 'number' ? ` (${(value * 100).toFixed(2)}%)` : '';
+  return typeof value === 'number' ? ` (${formatProbability(value)})` : '';
 }
 
-export default function SentimentBadge({ modelSentiment, confidence, probs, isPending }) {
+function formatProbability(value) {
+  const percentage = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${percentage.toFixed(2)}%`;
+}
+
+export default function SentimentBadge({
+  modelSentiment,
+  confidence,
+  probs,
+  isPending,
+}) {
   const modelValue = modelSentiment ?? null;
   const modelMeta = getSentimentMeta(modelValue);
   const modelPctStr = getProbabilityLabel(modelValue, probs, confidence);
 
-  const titleStr = [];
-  if (modelValue) titleStr.push(`Model Sentiment: ${modelValue}`);
+  const modelTitle = [];
+  if (modelValue) modelTitle.push(`Model Sentiment: ${modelValue}`);
   if (probs) {
     for (const label of ['positive', 'neutral', 'negative']) {
       if (typeof probs[label] === 'number') {
-        titleStr.push(`${label}: ${(probs[label] * 100).toFixed(2)}%`);
+        modelTitle.push(`${label}: ${formatProbability(probs[label])}`);
       }
     }
   }
-
   return (
-    <div className={styles.group} title={titleStr.join('\n')}>
-      <span className={`${styles.badge} ${modelMeta?.cls || styles.neutral}`}>
-        Sentiment: {isPending
+    <div className={styles.group}>
+      <span
+        className={`${styles.badge} ${modelMeta?.cls || styles.neutral}`}
+        title={modelTitle.join('\n')}
+      >
+        Model: {isPending
           ? <span className="model-pending"><span className="model-pending-spinner" />Analyzing</span>
           : modelMeta ? `${modelMeta.label}${modelPctStr}` : 'Unavailable'}
+          
       </span>
+
+      {/*
+        <button
+          type="button"
+          className={`${styles.badge} ${styles.apiBadge} ${getSentimentMeta(apiSentiment)?.cls || styles.neutral}`}
+        >
+          API: {apiSentiment || 'Unavailable'}
+        </button>
+      */}
     </div>
   );
 }
