@@ -26,6 +26,7 @@ export default function ClickbaitBadge({ article }) {
   const tooltipText = tooltipLines.join('\n');
 
   return (
+
     <span
       className={`${styles.badge} ${isAvailable ? (isClickbait ? styles.yes : styles.no) : styles.unavailable} ${isMl ? styles.mlBadge : ''}`}
       title={tooltipText}

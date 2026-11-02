@@ -2,8 +2,8 @@ import { batchPredictReliability, markModelPending } from './reliabilityApi';
 
 const PROXY_BASE = 'http://localhost:3131';
 const DEFAULT_Q = 'news';
-const TARGET_ARTICLES = 100;
-const BATCH_SIZE = 10;
+const TARGET_ARTICLES = 10;
+const BATCH_SIZE = 1;
 
 function isEnglishArticle(article) {
   const language = String(article?.language || '').trim().toLowerCase();

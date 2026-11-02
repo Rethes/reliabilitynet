@@ -106,25 +106,6 @@ CLICKBAIT_LABEL_MAP = {
 id2label_sentiment = getattr(sentiment_model.config, 'id2label', {})
 
 
-def build_article_text(article):
-    """
-    Build the text sent to a model from one article object.
-
-    Article APIs usually provide a title and body separately, so the title is
-    prepended to the body. Some callers instead provide text that already starts
-    with the title; in that case, return it as-is to avoid counting the title twice.
-    """
-    title = article.get('title', '').strip()
-    body = (article.get('description', '') or article.get('text', '') or '').strip()
-
-    if title and body[:len(title)].casefold() == title.casefold():
-        remainder = body[len(title):]
-        if not remainder or remainder[0].isspace() or remainder[0] in '.:!?;-':
-            return body
-
-    return f"{title}. {body}".strip()
-
-
 def get_sentiment_label(idx):
     """
     Convert a sentiment class index into a readable label.
@@ -174,7 +155,7 @@ def index():
         "endpoints": {
             "GET /": "Service info",
             "GET /health": "Health status and model capabilities",
-            "POST /predict/sentiment": "Predict sentiment status specifically for article titles",
+            "POST /predict/sentiment": "Predict sentiment using article titles only",
             "POST /predict/clickbait": "Predict clickbait status specifically for article titles",
             "POST /predict/reliability": "Predict reliability score for article titles"
 
@@ -196,7 +177,7 @@ def health():
         "endpoints": {
             "GET /": "Service info",
             "GET /health": "Health status and model capabilities",
-            "POST /predict/sentiment": "Predict sentiment status specifically for article titles",
+            "POST /predict/sentiment": "Predict sentiment using article titles only",
             "POST /predict/clickbait": "Predict clickbait status specifically for article titles",
             "POST /predict/reliability": "Predict reliability score for article titles"
         },
@@ -264,8 +245,8 @@ def predict_reliability_meta(texts, base_probs_list):
         X_num_raw = np.array(base_probs_list, dtype=np.float32)
         X_num_scaled = meta_scaler.transform(X_num_raw)
 
-        # TF-IDF text features capture the article language itself and are used by
-        # the saved meta-classifier alongside the probability features.
+        # TF-IDF text features use the supplied title text alongside the
+        # probability features.
         X_tfidf = meta_tfidf.transform(texts)
 
         # The model was trained with a fixed number of expected input features.
@@ -335,7 +316,7 @@ def predict_sentiment():
 
     Input JSON can contain either:
         - texts: list of raw text strings
-        - articles: list of article objects with title/description/text fields
+        - articles: list of article objects; only each article's title is used
 
     Output JSON includes the model label, confidence score, probability breakdown,
     and the article title or article id for each item.
@@ -344,16 +325,16 @@ def predict_sentiment():
     texts = data.get('texts', [])
     articles = data.get('articles', [])
 
-    # If the client sends article objects instead of plain text, we join the title
-    # and body so the model sees a complete text sample.
-    if not texts and articles:
-        texts = [build_article_text(article) for article in articles]
+    # Article-object requests use titles only, matching the sentiment model's
+    # title-based training input. Raw text requests remain supported.
+    if articles:
+        texts = [article.get("title") or "" for article in articles]
 
     if not texts:
         return jsonify({"error": "No texts or articles provided for prediction"}), 400
 
     try:
-        # Tokenize the article text so the transformer can understand it.
+        # Tokenize only the title for sentiment inference.
         inputs = sentiment_tokenizer(
             texts,
             padding=True,
@@ -418,13 +399,13 @@ def predict_reliability():
         results together with confidence and probability details.
     """
     data = request.get_json(silent=True) or {}
-    texts = data.get('texts', [])
     articles = data.get('articles', [])
-
-    if not texts and articles:
-        texts = [build_article_text(article) for article in articles]
-
-    titles = [articles[i].get('title', text) for i, text in enumerate(texts)] if articles else texts
+    texts = (
+        [article.get('title') or '' for article in articles]
+        if articles
+        else data.get('texts', [])
+    )
+    titles = texts
 
     if not texts:
         return jsonify({"error": "No texts or articles provided for prediction"}), 400
@@ -433,11 +414,10 @@ def predict_reliability():
         # ---------------------------------------------------------------------
         # Step 1: sentiment inference
         # ---------------------------------------------------------------------
-        # We classify the article text to understand whether it sounds negative,
-        # neutral, or positive. This becomes one of the features used in the final
-        # reliability estimate.
+        # Sentiment inference uses only article titles, matching the model's
+        # title-based training input. The meta-classifier also uses titles only.
         inputs = sentiment_tokenizer(
-            texts,
+            titles,
             padding=True,
             truncation=True,
             max_length=512,

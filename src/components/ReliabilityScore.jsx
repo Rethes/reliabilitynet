@@ -12,15 +12,23 @@ export default function ReliabilityScore({ article }) {
   const available = score !== null;
   const pending = article?.modelAnalysisStatus === 'pending';
   const color = available ? getReliabilityColor(score) : 'var(--text3)';
-  const metaLabel = article?.truthfulnessLabel ? ` (${article.truthfulnessLabel})` : '';
-  const tooltip = pending
-    ? 'Reliability model is analyzing this article'
-    : available
-    ? `Logistic Regression Meta-Classifier Reliability: ${score}%${metaLabel}`
-    : 'Meta-classifier reliability: Unavailable';
+  const probabilityDetails = Object.entries(article?.metaProbs || {})
+    .filter(([, probability]) => typeof probability === 'number')
+    .map(([label, probability]) => {
+      const percent = Math.abs(probability) <= 1 ? probability * 100 : probability;
+      return `${label}: ${percent.toFixed(2)}%`;
+    });
+  const tooltipLines = pending
+    ? ['Reliability model is analyzing this article']
+    : [
+      `Reliability model: ${available ? `${score}%` : 'Unavailable'}`,
+      `Truthfulness: ${article?.truthfulnessLabel || 'Unavailable'}`,
+      ...probabilityDetails,
+    ];
+  const tooltip = tooltipLines.join('\n');
 
   return (
-    <div className={styles.wrap} title={tooltip}>
+    <div className={styles.wrap} title={tooltip} aria-label={tooltip}>
       <svg className={styles.ring} viewBox="0 0 36 36">
         <circle className={styles.ringBg} cx="18" cy="18" r="15.9" />
         <circle
