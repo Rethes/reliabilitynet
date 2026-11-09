@@ -1,10 +1,11 @@
-const SENTIMENT_API = 'http://localhost:5001';
-const ANALYSIS_BATCH_SIZE = 10;
 import { attachModelSentiment } from './reliabilityApi.js';
+import { mlApiBase } from './apiConfig';
+
+const ANALYSIS_BATCH_SIZE = 10;
 
 export async function checkSentimentServer() {
   try {
-    const res = await fetch(`${SENTIMENT_API}/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return false;
     const data = await res.json();
     return data.status === 'healthy';
@@ -23,7 +24,7 @@ export async function batchPredictSentiment(articles) {
   try {
     const isAvailable = await checkSentimentServer();
     if (!isAvailable) {
-      console.warn('[Sentiment API] Model server at http://localhost:5001 is offline. Skipping ML analysis.');
+      console.warn('[Sentiment API] Model service is offline. Skipping ML analysis.');
       return articles;
     }
 
@@ -38,7 +39,7 @@ export async function batchPredictSentiment(articles) {
       }));
 
       try {
-        const response = await fetch(`${SENTIMENT_API}/predict/sentiment`, {
+        const response = await fetch(`${mlApiBase}/predict/sentiment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articles: payload }),
@@ -80,4 +81,3 @@ export async function batchPredictSentiment(articles) {
     return articles;
   }
 }
-

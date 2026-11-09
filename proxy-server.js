@@ -1,74 +1,197 @@
-/**
- * ReliabilityNet — Local Proxy Server
- * Requires Node.js 18+. No npm install needed.
- * Run: node proxy-server.js
- */
-
-// Disable SSL cert verification for WiFi networks with SSL inspection
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 import http from 'node:http';
-import url from 'node:url';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const PORT     = 3131;
-const API_BASE = 'https://api.webz.io';
+const PORT = 3131;
+const API_ORIGIN = 'https://api.webz.io';
+const NEWS_PATH = '/api/news';
+const LEGACY_NEWS_PATH = '/newsApiLite';
+const ALLOWED_ORIGIN = 'http://localhost:5173';
+const ALLOWED_QUERY_PARAMS = [
+  'q',
+  'size',
+  'highlight',
+  'ts',
+  'sort',
+  'order',
+  'webz_reporter',
+  'includeSyndicated',
+  'allowNewsHistory',
+];
+const UPSTREAM_TIMEOUT_MS = 10_000;
 
-const server = http.createServer(async (req, res) => {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin',  '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', '*');
-  res.setHeader('Access-Control-Max-Age',       '86400');
+function sendJSON(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
 
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-
-  // Health check
-  if (req.url === '/ping') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  // Only allow /newsApiLite path
-  const parsed = url.parse(req.url, true);
-  if (!parsed.pathname.startsWith('/newsApiLite')) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
-    return;
-  }
-
-  // Token is passed as a query param by the client; proxy forwards the full URL as-is
-  const upstream = `${API_BASE}${req.url}`;
-  console.log(`[proxy] → ${upstream}`);
+function getUpstreamURL(path, token) {
+  let url;
 
   try {
-    // Use Node 18+ built-in fetch — handles HTTP/2 automatically
-    const upstreamRes = await fetch(upstream, {
-      method:  'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept':     'application/json',
-      },
-    });
-
-    const body = await upstreamRes.text();
-    console.log(`[proxy] ← ${upstreamRes.status}  ${body.slice(0, 120)}`);
-
-    res.writeHead(upstreamRes.status, { 'Content-Type': 'application/json' });
-    res.end(body);
-
-  } catch (err) {
-    console.error('[proxy] Error:', err.message);
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Upstream failed', detail: err.message }));
+    url = new URL(path, `${API_ORIGIN}${NEWS_PATH}`);
+  } catch {
+    return null;
   }
-});
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log('\n  ◉ PULSE Proxy running → http://localhost:' + PORT);
-  console.log('  → Using built-in fetch (HTTP/2 compatible)');
-  console.log('  → SSL verification disabled (WiFi-compatible)');
-  console.log('  → Proxying to api.webz.io/newsApiLite');
-  console.log('  → Open news-hub.html in your browser');
-  console.log('  → Ctrl+C to stop\n');
-});
+  if (url.origin !== API_ORIGIN || url.pathname !== NEWS_PATH) return null;
+
+  url.searchParams.delete('token');
+  url.searchParams.set('token', token);
+  return url;
+}
+
+function redactSecret(value, secret) {
+  if (typeof value === 'string') return value.replaceAll(secret, '[redacted]');
+  if (Array.isArray(value)) return value.map(item => redactSecret(item, secret));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactSecret(item, secret)]),
+    );
+  }
+  return value;
+}
+
+async function fetchNews(res, url, token, fetchImpl) {
+  let upstream;
+  try {
+    upstream = await fetchImpl(url, {
+      headers: {
+        'User-Agent': 'ReliabilityNet local news proxy',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    console.error('[proxy] Upstream request failed:', errorName);
+    const detail = errorName === 'TimeoutError'
+      ? 'Upstream request timed out'
+      : 'Upstream request failed';
+    sendJSON(res, 502, { error: 'Upstream failed', detail });
+    return;
+  }
+
+  let body;
+  try {
+    body = JSON.parse(await upstream.text());
+  } catch {
+    sendJSON(res, upstream.status, { error: 'Invalid upstream response' });
+    return;
+  }
+
+  const safeBody = redactSecret(body, token);
+  if (
+    safeBody
+    && !Array.isArray(safeBody)
+    && typeof safeBody === 'object'
+    && typeof safeBody.next === 'string'
+  ) {
+    const nextURL = getUpstreamURL(safeBody.next, token);
+    if (nextURL) {
+      nextURL.searchParams.delete('token');
+      const next = `${nextURL.pathname}${nextURL.search}`;
+      safeBody.next = `/api/news/next?${new URLSearchParams({ next })}`;
+    } else {
+      safeBody.next = null;
+    }
+  }
+
+  sendJSON(res, upstream.status, safeBody);
+}
+
+export function createProxyServer({ token = process.env.WEBZ_TOKEN, fetchImpl = fetch } = {}) {
+  const webzToken = typeof token === 'string' ? token.trim() : '';
+
+  return http.createServer(async (req, res) => {
+    const origin = req.headers.origin;
+    if (origin === ALLOWED_ORIGIN) {
+      res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Vary', 'Origin');
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(origin && origin !== ALLOWED_ORIGIN ? 403 : 204);
+      res.end();
+      return;
+    }
+
+    if (req.method !== 'GET') {
+      sendJSON(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+
+    let requestURL;
+    try {
+      requestURL = new URL(req.url || '/', 'http://localhost');
+    } catch {
+      sendJSON(res, 400, { error: 'Invalid request URL' });
+      return;
+    }
+
+    if (requestURL.pathname === '/ping' || requestURL.pathname === '/api/news/ping') {
+      sendJSON(res, 200, { ok: true });
+      return;
+    }
+    if (requestURL.pathname === '/api/health') {
+      sendJSON(res, 200, { status: 'ok' });
+      return;
+    }
+
+    const isNewsRequest = requestURL.pathname === NEWS_PATH
+      || requestURL.pathname === LEGACY_NEWS_PATH
+      || requestURL.pathname === `/api/news${LEGACY_NEWS_PATH}`;
+    const isNextPageRequest = requestURL.pathname === '/api/news/next';
+    if (!isNewsRequest && !isNextPageRequest) {
+      sendJSON(res, 404, { error: 'Not found' });
+      return;
+    }
+    if (!webzToken) {
+      console.error('[proxy] WEBZ_TOKEN is not configured');
+      sendJSON(res, 503, { error: 'News service unavailable' });
+      return;
+    }
+
+    let upstreamURL;
+    if (isNextPageRequest) {
+      upstreamURL = getUpstreamURL(requestURL.searchParams.get('next'), webzToken);
+      if (!upstreamURL) {
+        sendJSON(res, 400, { error: 'Invalid next page' });
+        return;
+      }
+    } else {
+      upstreamURL = new URL(NEWS_PATH, API_ORIGIN);
+      upstreamURL.searchParams.set('q', '*');
+      upstreamURL.searchParams.set('size', '10');
+      upstreamURL.searchParams.set('sort', 'crawled');
+      upstreamURL.searchParams.set('order', 'desc');
+      upstreamURL.searchParams.set('webz_reporter', 'true');
+      upstreamURL.searchParams.set('includeSyndicated', 'false');
+      upstreamURL.searchParams.set('allowNewsHistory', 'false');
+      for (const name of ALLOWED_QUERY_PARAMS) {
+        const value = requestURL.searchParams.get(name);
+        if (value !== null) upstreamURL.searchParams.set(name, value);
+      }
+      upstreamURL.searchParams.set('token', webzToken);
+    }
+
+    await fetchNews(res, upstreamURL, webzToken, fetchImpl);
+  });
+}
+
+const isMain = process.argv[1]
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const server = createProxyServer();
+  if (!process.env.WEBZ_TOKEN?.trim()) {
+    console.warn('[proxy] WEBZ_TOKEN is not set; news requests will return 503');
+  }
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`\n  ReliabilityNet local news proxy → http://localhost:${PORT}`);
+    console.log('  → Webz.io credentials are kept server-side');
+    console.log('  → Ctrl+C to stop\n');
+  });
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "reliabilitynet-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGINS": "http://localhost:5173"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reliabilitynet-db",
+      "database_id": "67193c66-bfa7-40bc-90d1-514deff54a0c",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "ML_RATE_LIMITER",
+      "namespace_id": "731905",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
+  ],
+  "env": {
+    "production": {
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "ALLOWED_ORIGINS": "https://reliabilitynet.pages.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "reliabilitynet-db",
+          "database_id": "67193c66-bfa7-40bc-90d1-514deff54a0c",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        {
+          "name": "ML_RATE_LIMITER",
+          "namespace_id": "731905",
+          "simple": {
+            "limit": 30,
+            "period": 60
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,9 +1,12 @@
 import json
+import os
 import sys
 import urllib.request
 
 
 API_URL = "http://localhost:5001"
+ML_API_KEY = os.environ.get("ML_API_KEY")
+AUTH_HEADERS = {"X-ML-Key": ML_API_KEY} if ML_API_KEY else {}
 
 print("--- Testing ReliabilityNet Reliability Server ---")
 
@@ -17,7 +20,7 @@ request_data = json.dumps({"articles": [article]}).encode("utf-8")
 request = urllib.request.Request(
     f"{API_URL}/predict/reliability",
     data=request_data,
-    headers={"Content-Type": "application/json"},
+    headers={"Content-Type": "application/json", **AUTH_HEADERS},
 )
 
 try:

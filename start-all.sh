@@ -17,8 +17,14 @@ cd "$DIR"
 
 # 1. Start Proxy Server (Port 3131)
 echo "1. Starting Proxy Server on http://localhost:3131..."
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
 node proxy-server.js &
 PROXY_PID=$!
+unset WEBZ_TOKEN
 
 # 2. Start Auth / Save Server if available (Port 4000)
 if [ -d "server" ]; then

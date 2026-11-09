@@ -98,8 +98,8 @@ cp .env.example .env
 
 Notes:
 
-- Replace the `VITE_API_KEY` placeholder in `.env` with your Webz.io API key. It is required for live news fetching.
-- Vite loads `VITE_API_KEY` from the project-root `.env` file. Restart the frontend after changing it.
+- Set `WEBZ_TOKEN` in `.env` for the local news proxy. It is read only by the proxy process and is never sent to the browser.
+- Leave `VITE_API_BASE` empty for local development. For a deployed frontend, set it to the Worker origin (for example, `https://api.example.com`) and rebuild.
 - The auth server reads `JWT_SECRET` from its process environment; it does not load the root `.env` file. To override the local development default, export `JWT_SECRET` in the terminal before starting the services.
 
 ## Run the app
@@ -124,6 +124,9 @@ Open multiple terminals.
 Terminal 1 - proxy:
 
 ```bash
+set -a
+. ./.env
+set +a
 node proxy-server.js
 ```
 
@@ -166,6 +169,102 @@ Key endpoints include:
 - `POST /predict/reliability`
 
 The frontend relies on this service to enrich article cards with reliability signals.
+In local development, the frontend talks directly to this service. With
+`VITE_API_BASE` set, it uses the Cloudflare Worker ML relay instead.
+
+News retrieval uses Webz.io's current `GET https://api.webz.io/api/news` endpoint.
+The local proxy and production Worker keep `WEBZ_TOKEN` server-side, constrain
+upstream pagination URLs, and translate Webz pagination links into same-origin
+app routes. Pagination reads Webz's `more_results_available` response field.
+
+For local development, the model server defaults to allowing browser requests from
+`http://localhost:5173`. If `ML_API_KEY` is unset, direct local API requests remain
+available and the server prints a warning. For deployment, set `ML_API_KEY` on the
+model server and configure the same value as the Worker secret; the Worker sends it
+as `X-ML-Key` and does not expose it to browsers. Set `ALLOWED_ORIGINS` to a
+comma-separated list of exact frontend origins. The Worker limits ML requests to
+30 per IP per minute, with a 1 MiB request-body cap and a 90-second upstream
+timeout. Cloudflare applies approximate per-location limits, so people sharing an
+IP address may share a quota. Before deployment, verify the Worker rate-limit
+namespace ID in `worker/wrangler.jsonc` is unique within the Cloudflare account.
+
+To test the Worker relay locally, copy `worker/.env.example` to
+`worker/.dev.vars`, set a random `ML_API_KEY` there, and set the same value in the
+model server environment before starting it. The model server does not load an
+environment file automatically. `.dev.vars` is ignored by Git.
+
+## Named Cloudflare model tunnel
+
+The model service remains bound to loopback on port 5001. To expose it through a
+named Cloudflare Tunnel on macOS:
+
+1. Install `cloudflared` with `brew install cloudflared`, then authenticate with
+   `cloudflared tunnel login`.
+2. Create the named tunnel and route a hostname in your Cloudflare-managed zone:
+
+   ```bash
+   cloudflared tunnel create reliabilitynet-model
+   cloudflared tunnel route dns reliabilitynet-model ml.yourdomain.com
+   ```
+
+3. Copy `deployment/cloudflared/config.yml.example` to
+   `~/.cloudflared/reliabilitynet-model.yml`. Replace the tunnel UUID, credentials
+   file path, and hostname with the values for your account.
+4. Start the model server with `ML_API_KEY` set, export the same key in the shell
+   that runs the tunnel, then run `scripts/start-model-tunnel.sh`. The script
+   validates the tunnel ingress and checks that the loopback model server responds.
+5. Configure the Worker `ML_ORIGIN` as `https://ml.yourdomain.com` and store the
+   same `ML_API_KEY` as a Worker secret. Do not copy tunnel credentials or keys
+   into the repository.
+
+## Cloudflare deployment without a custom domain
+
+The production frontend and API can use Cloudflare-provided subdomains when you
+do not control a custom domain:
+
+- Pages: `https://reliabilitynet.pages.dev`
+- Worker: `https://reliabilitynet-api-production.rethesmutua.workers.dev`
+
+The production Worker allows the Pages origin and uses its `workers.dev`
+hostname. Build the frontend with `VITE_API_BASE` set to the deployed Worker URL,
+then deploy the `dist` directory to the `reliabilitynet` Pages project. Do not
+include a trailing slash in `VITE_API_BASE`.
+
+The ML relay remains unavailable until the model service has a stable HTTPS
+hostname. For temporary end-to-end testing against models running on your Mac,
+use the protected Cloudflare Quick Tunnel scripts below. Quick Tunnel URLs are
+ephemeral and require your Mac, model server, and tunnel process to stay online;
+they are not a reliable production hosting option.
+
+### Temporary model Quick Tunnel
+
+On the `deployment` branch, from the repository root, open two Terminal windows:
+
+1. Start the model server with its local key:
+
+   ```bash
+   ./scripts/start-model-server.sh
+   ```
+
+   The script reads `ML_API_KEY` from the ignored `model-server.env`, tightens
+   the file permissions, and refuses to start if the key is missing. Keep this
+   terminal open.
+2. In the second terminal, start the Quick Tunnel:
+
+   ```bash
+   ./scripts/start-model-quick-tunnel.sh
+   ```
+
+   This verifies that the local model server requires the key, checks that the
+   production Worker has its matching `ML_API_KEY` secret, starts `cloudflared`,
+   and redeploys the Worker with the newly issued tunnel URL. It then checks the
+   Worker-to-model health route. Keep this terminal open too.
+3. Open `https://reliabilitynet.pages.dev` and verify article predictions. Press
+   Ctrl+C in the tunnel terminal to stop it.
+
+The Quick Tunnel URL changes when recreated. Run both scripts again after
+restarting the tunnel; the second script updates the Worker automatically. Never
+put model keys or tunnel URLs in frontend environment variables or commit them.
 
 ## Auth and saved articles
 

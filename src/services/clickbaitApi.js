@@ -1,4 +1,4 @@
-const ML_API_BASE = 'http://localhost:5001';
+import { mlApiBase } from './apiConfig';
 
 /**
  * Predict clickbait status for array of article titles
@@ -9,7 +9,7 @@ export async function predictClickbait(titles) {
   if (!Array.isArray(titles) || titles.length === 0) return [];
 
   try {
-    const response = await fetch(`${ML_API_BASE}/predict/clickbait`, {
+    const response = await fetch(`${mlApiBase}/predict/clickbait`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ titles }),

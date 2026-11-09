@@ -12,6 +12,7 @@ import { filterArticles, useNews } from './hooks/useNews';
 import LoginModal from './components/LoginModal';
 import ProfileModal from './components/ProfileModal';
 import styles from './App.module.css';
+import { isWorkerAPI } from './services/apiConfig';
 
 const SOURCE_COLOURS = ['#e63946','#2a9d8f','#e9c46a','#264653','#f4a261','#457b9d','#6a4c93','#1982c4'];
 
@@ -103,6 +104,15 @@ function AppInner() {
 
   // Error states
   const renderError = () => {
+    if (error === 'proxy' && isWorkerAPI) return (
+      <div className={styles.stateBox}>
+        <div className={styles.stateIcon}>⚠️</div>
+        <div className={styles.stateTitle}>News service unavailable</div>
+        <div className={styles.stateMsg}>Check your connection and try again.</div>
+        <button className={styles.retryBtn} onClick={() => loadNews(filters)}>↺ Retry</button>
+      </div>
+    );
+
     if (error === 'proxy') return (
       <div className={styles.stateBox}>
         <div className={styles.stateIcon}>🚦</div>
@@ -117,22 +127,20 @@ function AppInner() {
       </div>
     );
 
-    if (error === 'api_key') return (
-      <div className={styles.stateBox}>
-        <div className={styles.stateIcon}>🔑</div>
-        <div className={styles.stateTitle}>API Token Required</div>
-        <div className={styles.stateMsg}>
-          Open <code style={{color:'var(--accent)'}}>src/hooks/useNews.js</code> and set your API key from{' '}
-          <a href="https://webz.io/products/news-api#lite" target="_blank" rel="noopener noreferrer" style={{color:'var(--accent)'}}>webz.io</a>.
-        </div>
-      </div>
-    );
-
     if (error === 'auth') return (
       <div className={styles.stateBox}>
         <div className={styles.stateIcon}>⚠️</div>
         <div className={styles.stateTitle}>Couldn't load news</div>
-        <div className={styles.stateMsg}>Token rejected (401/403). Check your token at webz.io.</div>
+        <div className={styles.stateMsg}>The news service rejected its credentials. Please try again later.</div>
+        <button className={styles.retryBtn} onClick={() => loadNews(filters)}>↺ Retry</button>
+      </div>
+    );
+
+    if (error === 'billing') return (
+      <div className={styles.stateBox}>
+        <div className={styles.stateIcon}>⚠️</div>
+        <div className={styles.stateTitle}>News provider credits are low</div>
+        <div className={styles.stateMsg}>The site administrator needs to add credits to the news provider account before articles can load.</div>
         <button className={styles.retryBtn} onClick={() => loadNews(filters)}>↺ Retry</button>
       </div>
     );
@@ -141,7 +149,7 @@ function AppInner() {
       <div className={styles.stateBox}>
         <div className={styles.stateIcon}>⚠️</div>
         <div className={styles.stateTitle}>Couldn't load news</div>
-        <div className={styles.stateMsg}>Request failed. Check the proxy terminal for details.</div>
+        <div className={styles.stateMsg}>Request failed. Check your connection and try again.</div>
         <button className={styles.retryBtn} onClick={() => loadNews(filters)}>↺ Retry</button>
       </div>
     );

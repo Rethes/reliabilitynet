@@ -1,15 +1,22 @@
 import sys
 import json
+import os
 import urllib.request
 import urllib.error
 
 API_URL = "http://localhost:5001"
+ML_API_KEY = os.environ.get("ML_API_KEY")
+AUTH_HEADERS = {"X-ML-Key": ML_API_KEY} if ML_API_KEY else {}
 
 print("--- Testing RoBERTa ML Intelligence Server ---")
 
 # 1. Health check
 try:
-    with urllib.request.urlopen(f"{API_URL}/health", timeout=3) as resp:
+    health_request = urllib.request.Request(
+        f"{API_URL}/health",
+        headers=AUTH_HEADERS,
+    )
+    with urllib.request.urlopen(health_request, timeout=3) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         print("✓ Health Check Passed:", data)
 except Exception as e:
@@ -34,7 +41,7 @@ req_data = json.dumps({"articles": test_articles}).encode('utf-8')
 req = urllib.request.Request(
     f"{API_URL}/predict",
     data=req_data,
-    headers={"Content-Type": "application/json"}
+    headers={"Content-Type": "application/json", **AUTH_HEADERS}
 )
 
 try:
@@ -58,7 +65,7 @@ req_data_cb = json.dumps({"titles": ["SHOCKING VIDEO: You won't believe what thi
 req_cb = urllib.request.Request(
     f"{API_URL}/predict/clickbait",
     data=req_data_cb,
-    headers={"Content-Type": "application/json"}
+    headers={"Content-Type": "application/json", **AUTH_HEADERS}
 )
 
 try:

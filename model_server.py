@@ -12,6 +12,7 @@ requests. That makes it easy to call from the React frontend or any other
 service that needs article scores.
 """
 
+import hmac
 import os
 import sys
 import torch
@@ -32,6 +33,15 @@ SENTIMENT_MODEL_PATH = os.environ.get("SENTIMENT_MODEL_PATH", "./roberta_sentime
 CLICKBAIT_MODEL_PATH = os.environ.get("CLICKBAIT_MODEL_PATH", "./roberta_large_clickbait_model")
 META_MODEL_PATH = os.environ.get("META_MODEL_PATH", "./meta_logistic_regression_model")
 PORT = int(os.environ.get("PORT", 5001))
+ML_API_KEY = os.environ.get("ML_API_KEY") or None
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in (os.environ.get("ALLOWED_ORIGINS") or "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
+if ML_API_KEY is None:
+    print("WARNING: ML_API_KEY is not set; API key authentication is disabled.")
 
 # -----------------------------------------------------------------------------
 # 2) Model loading at startup
@@ -138,7 +148,22 @@ def get_clickbait_label(idx):
 # Flask is the HTTP layer. It exposes routes that the frontend hits to ask for
 # predictions. CORS is enabled so the browser can call this local API.
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=ALLOWED_ORIGINS)
+
+
+@app.before_request
+def require_ml_api_key():
+    if ML_API_KEY is None or request.method == 'OPTIONS':
+        return None
+
+    provided_key = request.headers.get('X-ML-Key', '')
+    if not hmac.compare_digest(
+        provided_key.encode('utf-8'),
+        ML_API_KEY.encode('utf-8'),
+    ):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    return None
 
 
 @app.route('/', methods=['GET'])

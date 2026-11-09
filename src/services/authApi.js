@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:4000';
+import { authApiBase } from './apiConfig';
 
 function getToken() {
   return localStorage.getItem('cn_token');
@@ -10,7 +10,7 @@ function authHeaders() {
 }
 
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${authApiBase}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
