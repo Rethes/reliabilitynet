@@ -110,7 +110,7 @@ export default function ArticleModal({ article, onClose }) {
           {snippet ? (
             <p className={styles.desc}>{snippet}</p>
           ) : (
-            <p className={styles.descEmpty}>Full article text is not available in the Webz.io News API Lite plan.</p>
+            <p className={styles.descEmpty}>Article summary is not available.</p>
           )}
 
           {/* CTA */}

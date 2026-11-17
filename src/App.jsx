@@ -145,6 +145,15 @@ function AppInner() {
       </div>
     );
 
+    if (error === 'rateLimit') return (
+      <div className={styles.stateBox}>
+        <div className={styles.stateIcon}>⏱️</div>
+        <div className={styles.stateTitle}>News requests are temporarily limited</div>
+        <div className={styles.stateMsg}>FreeNewsApi is receiving requests too quickly. Wait a moment, then retry.</div>
+        <button className={styles.retryBtn} onClick={() => loadNews(filters)}>↺ Retry</button>
+      </div>
+    );
+
     if (error) return (
       <div className={styles.stateBox}>
         <div className={styles.stateIcon}>⚠️</div>

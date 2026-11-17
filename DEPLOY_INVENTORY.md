@@ -1,16 +1,15 @@
 # ReliabilityNet deployment inventory
 
-Discovery only; no application or deployment code has been changed. Secret values are intentionally omitted.
+Provider-specific findings below have been updated for the FreeNewsApi migration. Unrelated discovery findings remain from the original audit. Secret values are intentionally omitted.
 
 ## Checkpoint summary
 
 - Current branch: `deployment` (the requested branch restriction). The deployment plan asks for a new `deploy-cloudflare` branch; that instruction was not followed because the owner explicitly limited work to `deployment`.
-- The worktree was clean before this inventory. No Worker, Wrangler configuration, D1 migration, or Pages redirect configuration exists.
-- The app currently consists of a Vite/React frontend, a Node news proxy, an Express/SQLite auth-and-saves server, and a local Flask model server.
-- Important findings before any deployment work:
-  - `VITE_API_KEY` is read by the frontend and sent as a `token` query parameter through the news proxy. The current local `.env` is ignored by git, but a production build was verified to contain its value in the generated JavaScript. No key value is included here.
-  - Treat the currently exposed Webz token as public and rotate it before deployment.
-  - `proxy-server.js` forwards the browser's query string to Webz, logs the resulting upstream URL, allows wildcard CORS, and disables TLS certificate verification.
+- The repository now includes a Cloudflare Worker API, Wrangler configuration, and a D1 migration under `worker/`.
+- The app currently consists of a Vite/React frontend, a Node news proxy, a Cloudflare Worker API, an Express/SQLite auth-and-saves server, and a local Flask model server.
+- Relevant deployment findings:
+  - `FREENEWS_API_KEY` is read server-side by the local proxy and Cloudflare Worker; it is sent to FreeNewsApi in the `x-api-key` header and is not included in the browser bundle.
+  - The news proxy forwards only supported search parameters, restricts local CORS to the Vite origin, and uses a fixed FreeNewsApi origin.
   - The Express server has a hardcoded fallback JWT signing secret if `JWT_SECRET` is absent.
   - The Flask server allows cross-origin requests without a key. The feed calls its reliability endpoint for anonymous visitors, so requiring login for ML would change the current logged-out experience; an access policy must be chosen before implementing the relay.
   - Existing SQLite data and model artifacts are local and ignored by git. No database or model files are tracked.
@@ -24,7 +23,7 @@ The source scan excluded `.git`, `node_modules`, `model_env`, `dist`, local envi
 | File and lines | URL/port | Purpose |
 |---|---|---|
 | `src/services/newsApi.js:3` | `http://localhost:3131` | Browser news proxy base and `/ping` health check. |
-| `proxy-server.js:13-14,68` | port `3131`; `https://api.webz.io`; local URL log | Proxy listener, Webz upstream base, startup log. Listener binds to `127.0.0.1`. |
+| `proxy-server.js`; `news-provider.js` | port `3131`; `https://api.freenewsapi.io` | Local proxy listener and FreeNewsApi upstream (`/v1/news`, `/v1/details`). Listener binds to `127.0.0.1`. |
 | `src/services/authApi.js:1` | `http://localhost:4000` | Browser auth/saved-articles API base. |
 | `server/index.js:9,37,175` | port `4000`; `localhost:5173`, `127.0.0.1:5173`; local URL log | Express listener, its two allowed CORS origins, and startup log. |
 | `src/services/clickbaitApi.js:1` | `http://localhost:5001` | Direct browser model-server base. |
@@ -38,7 +37,7 @@ The source scan excluded `.git`, `node_modules`, `model_env`, `dist`, local envi
 | `vite.config.js:4` | `https://vite.dev/config/` | Vite documentation comment. Vite's default development port is 5173; no custom server port is set. |
 | `src/index.css:1` | `https://fonts.googleapis.com/...` | External font stylesheet. |
 | `src/index.css:42`; `public/favicon.svg:1`; `public/icons.svg:1` | `http://www.w3.org/2000/svg` | SVG namespace identifiers, not service endpoints. |
-| `src/App.jsx:111,126` | `https://nodejs.org`; `https://webz.io/products/news-api#lite` | Help links shown in the news error UI. |
+| `src/App.jsx:117` | `https://nodejs.org` | Node.js help link shown in the local proxy error UI. |
 
 The two dependency lockfiles also contain package registry `resolved` URLs (dependency download metadata, not application endpoints): `package-lock.json` at lines 24, 29, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255, 272, 289, 306, 323, 340, 357, 374, 391, 408, 425, 442, 459, 476, 493, 510, 527, 544, 561, 578, 595, 612, 619, 629, 639, 669, 676, 686, 704, 719, 731, 749, 765, 770, 786, 791, 807, 812, 828, 833, 849, 854, 870, 875, 891, 896, 912, 917, 933, 938, 954, 959, 975, 980, 986, 999, 1010, 1048, 1055, 1063, 1068, 1074, 1078, 1082, 1097, 1106, 1118, 1152, 1158, 1168, 1180, 1185, 1203; and `server/package-lock.json` at lines 20, 33, 39, 44, 48, 52, 59, 73, 84, 93, 104, 128, 133, 137, 141, 152, 158, 167, 180, 191, 196, 202, 214, 223, 232, 238, 250, 255, 264, 274, 279, 288, 297, 307, 316, 330, 339, 345, 354, 363, 372, 381, 393, 399, 408, 417, 458, 463, 469, 487, 496, 505, 511, 515, 520, 539, 544, 557, 563, 570, 575, 582, 587, 599, 614, 619, 631, 636, 640, 644, 651, 657, 663, 672, 694, 700, 711, 721, 727, 733, 739, 745, 751, 757, 763, 772, 781, 785, 790, 799, 811, 820, 832, 839, 844, 848, 853, 859, 865, 871, 880, 892, 901, 912, 921, 928, 933, 945, 954, 963, 969, 996, 1008, 1013, 1023, 1034, 1039, 1048, 1063, 1078, 1092, 1097, 1101, 1105, 1112, 1118, 1130, 1154, 1160, 1175, 1181, 1195, 1200, 1211, 1216, 1229, 1234, 1248, 1253, 1258, 1262, 1266, 1273, 1278, 1282, 1286, 1298, 1307, 1316, 1325, 1337, 1353, 1362, 1374, 1387, 1396, 1402, 1411, 1420.
 
@@ -48,27 +47,26 @@ No client-side router dependency or route usage was found, so the current fronte
 
 | Variable | Read location | Secret? | Observed use |
 |---|---|---|---|
-| `VITE_API_KEY` | `src/hooks/useNews.js:6` via `import.meta.env`; named in the ignored `.env` and tracked `.env.example` | Yes; exposed to browsers when compiled by Vite | Passed to `fetchNews`, added to the news URL as `token`, then forwarded upstream by the proxy. The built JS was checked without displaying the value; it contains the local value. `.env.example` uses a placeholder, not a usable token. |
+| `FREENEWS_API_KEY` | `proxy-server.js` via `process.env`; `worker/src/index.js` via `c.env`; set in local `.env`, `worker/.dev.vars`, or as a Worker secret | Yes | Sent server-side to FreeNewsApi in the `x-api-key` header. It is not sent to the browser. |
+| `VITE_API_BASE` | `src/services/apiConfig.js` via `import.meta.env`; `.env.example` | No | Selects the deployed Worker API origin for the frontend. |
 | `JWT_SECRET` | `server/index.js:10` via `process.env` | Yes | Signs and verifies JWTs, but falls back to a hardcoded development secret when unset. |
-| `NODE_TLS_REJECT_UNAUTHORIZED` | `proxy-server.js:8` via `process.env` assignment | Security-sensitive setting | Set to `'0'`, disabling TLS certificate verification process-wide. |
 | `SENTIMENT_MODEL_PATH` | `model_server.py:31` via `os.environ.get` | No | Sentiment model directory; default is a local relative path. |
 | `CLICKBAIT_MODEL_PATH` | `model_server.py:32` via `os.environ.get` | No | Clickbait model directory; default is a local relative path. |
 | `META_MODEL_PATH` | `model_server.py:33` via `os.environ.get` | No | Meta-classifier model directory; default is a local relative path. |
 | `PORT` | `model_server.py:34` via `os.environ.get` | No | Flask port; default is 5001. |
 
-No Worker, Cloudflare, or other application environment variables are currently read. The local `.env` contains the `VITE_API_KEY` name; its value is not reproduced here.
+The Worker also reads `ALLOWED_ORIGINS`, `JWT_SECRET`, `ML_ORIGIN`, and `ML_API_KEY`, and uses its configured D1 and rate-limit bindings. The local `.env` contains `FREENEWS_API_KEY`; its value is not reproduced here.
 
 ## 3. News proxy (`proxy-server.js`)
 
 - Listens on `127.0.0.1:3131`.
-- Adds wildcard CORS (`*` origin and headers); permits `GET` and `OPTIONS`; answers preflight with 204.
+- Allows CORS only from `http://localhost:5173`; permits `GET` and `OPTIONS`; answers allowed preflight requests with 204.
 - `GET /ping` returns status 200 and `{"ok":true}`.
-- Any path beginning `/newsApiLite` is concatenated to `https://api.webz.io`; all other paths return 404 `{"error":"Not found"}`.
-- The frontend calls `/newsApiLite` with `token`, `q`, `size=1`, and `highlight=false`; it adds `ts` as epoch milliseconds when `dateFrom` is set. The proxy forwards the query string without validation or modification and adds `User-Agent` and `Accept` headers upstream.
-- The upstream status and body are passed through as JSON. Fetch failures return 502 with `error` and a `detail` copied from the exception.
-- The frontend follows `json.next` by prefixing the local proxy origin. The proxy does not validate the next-page host or strip a token from the next link; it forwards the resulting request URL as supplied.
-- The proxy logs the full upstream URL (which includes the query token) and a prefix of the upstream response body.
-- TLS verification is globally disabled by `NODE_TLS_REJECT_UNAUTHORIZED='0'`.
+- News routes call `https://api.freenewsapi.io/v1/news` and `/v1/details`; the API key is sent in the `x-api-key` header and stays server-side.
+- The proxy forwards allowlisted title, language, date, and cursor parameters; it adapts FreeNewsApi article details into the article shape used by the frontend.
+- Pagination uses the provider cursor through `/api/news/next`; arbitrary upstream URLs are not accepted.
+- Upstream calls are paced at 500 ms intervals to respect FreeNewsApi's documented two-requests-per-second limit.
+- Upstream status codes are passed through as JSON. Fetch failures return 502 with a generic detail; API keys are redacted from error responses.
 
 ## 4. Auth server (`server/index.js`)
 
@@ -169,7 +167,7 @@ The slowest measured case was 11.04 seconds. This is one local run and does not 
 - Command: `npm run build`
 - Result: success with Vite 8.3.0; 49 modules transformed.
 - Output: `dist/` (`dist/index.html`, `dist/assets/index-*.css`, and `dist/assets/index-*.js`).
-- Verified that the generated JavaScript contains the local `VITE_API_KEY` value; the value is deliberately not included in this report.
+- `FREENEWS_API_KEY` is only read by the local proxy and Worker, so it is not embedded in the frontend build.
 
 ## 9. Git hygiene
 
