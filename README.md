@@ -1,6 +1,6 @@
 # ReliabilityNet
 
-ReliabilityNet is a full-stack news intelligence app that combines live article discovery with AI-powered reliability scoring. It pulls headlines from Webz.io, runs sentiment and misinformation checks through local transformer models, and presents the results in a React UI for browsing, filtering, saving, and reviewing articles.
+ReliabilityNet is a full-stack news intelligence app that combines live article discovery with AI-powered reliability scoring. It pulls headlines from FreeNewsApi, runs sentiment and misinformation checks through local transformer models, and presents the results in a React UI for browsing, filtering, saving, and reviewing articles.
 
 ## Overview
 
@@ -9,7 +9,7 @@ The project is split into three runtime services:
 - Frontend: React + Vite app in the root project and `src/` directory
 - Auth backend: Express app in `server/` for login, profile management, and saved articles
 - ML backend: Flask service in `model_server.py` for sentiment, clickbait, and reliability predictions
-- News proxy: lightweight Node service that forwards Webz.io requests
+- News proxy: lightweight Node service that forwards FreeNewsApi requests
 
 ## Tech stack
 
@@ -31,7 +31,7 @@ ReliabilityNet/
 ├── package.json                   # Frontend app scripts and dependencies
 ├── vite.config.js                 # Vite frontend config
 ├── index.html                     # Main HTML shell for the React app
-├── proxy-server.js                # Local Webz.io proxy for fetching news
+├── proxy-server.js                # Local FreeNewsApi proxy for fetching news
 ├── model_server.py                # Flask ML API for sentiment, clickbait, and reliability
 ├── requirements.txt               # Python dependencies for the model server
 ├── start-all.sh                   # Starts proxy, backend, ML API, and frontend together
@@ -61,7 +61,7 @@ ReliabilityNet/
 
 - Node.js 18+
 - Python 3.10+
-- A Webz.io API key
+- A FreeNewsApi API key
 - Local model artifacts in the repo root
 
 ## Setup
@@ -97,8 +97,8 @@ cp .env.example .env
 ```
 
 Notes:
+- Set `FREENEWS_API_KEY` in `.env` for the local news proxy. It is read only by the proxy process and is never sent to the browser.
 
-- Set `WEBZ_TOKEN` in `.env` for the local news proxy. It is read only by the proxy process and is never sent to the browser.
 - Leave `VITE_API_BASE` empty for local development. For a deployed frontend, set it to the Worker origin (for example, `https://api.example.com`) and rebuild.
 - The auth server reads `JWT_SECRET` from its process environment; it does not load the root `.env` file. To override the local development default, export `JWT_SECRET` in the terminal before starting the services.
 
@@ -172,10 +172,10 @@ The frontend relies on this service to enrich article cards with reliability sig
 In local development, the frontend talks directly to this service. With
 `VITE_API_BASE` set, it uses the Cloudflare Worker ML relay instead.
 
-News retrieval uses Webz.io's current `GET https://api.webz.io/api/news` endpoint.
-The local proxy and production Worker keep `WEBZ_TOKEN` server-side, constrain
-upstream pagination URLs, and translate Webz pagination links into same-origin
-app routes. Pagination reads Webz's `more_results_available` response field.
+News retrieval uses FreeNewsApi's `/v1/news` and `/v1/details` endpoints. The
+local proxy and production Worker keep `FREENEWS_API_KEY` server-side and
+translate cursor pagination into same-origin app routes. Article requests are
+throttled to FreeNewsApi's documented two requests per second.
 
 For local development, the model server defaults to allowing browser requests from
 `http://localhost:5173`. If `ML_API_KEY` is unset, direct local API requests remain
@@ -189,9 +189,11 @@ IP address may share a quota. Before deployment, verify the Worker rate-limit
 namespace ID in `worker/wrangler.jsonc` is unique within the Cloudflare account.
 
 To test the Worker relay locally, copy `worker/.env.example` to
-`worker/.dev.vars`, set a random `ML_API_KEY` there, and set the same value in the
-model server environment before starting it. The model server does not load an
-environment file automatically. `.dev.vars` is ignored by Git.
+`worker/.dev.vars`, set `FREENEWS_API_KEY` and a random `ML_API_KEY` there, and
+set the same ML key in the model server environment before starting it. For
+production, configure the news key with `npx wrangler secret put FREENEWS_API_KEY`
+from the `worker/` directory. The model server does not load an environment file
+automatically. `.dev.vars` is ignored by Git.
 
 ## Named Cloudflare model tunnel
 
@@ -279,7 +281,7 @@ The backend in `server/index.js` provides:
 
 ### News discovery
 
-- live news feed from Webz.io
+- live news feed from FreeNewsApi
 - keyword search
 - category, language, date, and source filtering
 - sorting by newest, oldest, and source

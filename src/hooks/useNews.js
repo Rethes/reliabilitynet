@@ -141,8 +141,11 @@ export function useNews() {
       applyFilters(articles, new Set(), filters);
     } catch (err) {
       if (requestId !== loadRequestRef.current) return;
-      const code = err.message.includes('401') || err.message.includes('403') ? 'auth' : 'generic';
-      setError(err.message.includes('402') ? 'billing' : code);
+      const status = err.status || Number(err.message.match(/\bHTTP (\d+)\b/)?.[1]);
+      if (status === 402) setError('billing');
+      else if (status === 429) setError('rateLimit');
+      else if (status === 401 || status === 403) setError('auth');
+      else setError('generic');
     } finally {
       if (requestId === loadRequestRef.current) {
         setIsLoading(false);

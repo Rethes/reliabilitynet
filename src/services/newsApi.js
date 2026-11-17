@@ -3,7 +3,6 @@ import { newsApiBase, newsApiOrigin, newsHealthUrl } from './apiConfig';
 
 const DEFAULT_Q = '*';
 const TARGET_ARTICLES = 10;
-const BATCH_SIZE = 10;
 
 function isEnglishArticle(article) {
   const language = String(article?.language || '').trim().toLowerCase();
@@ -25,31 +24,41 @@ export async function checkProxy() {
 async function proxyFetch(params = {}) {
   const qs = new URLSearchParams(params).toString();
   const url = `${newsApiBase}?${qs}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const error = new Error(body?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
 async function proxyFetchNext(nextPath) {
   const url = `${newsApiOrigin}${nextPath}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const error = new Error(body?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
 export async function fetchNews(filters = {}, onProgress, onArticlesBatch) {
-  const q = filters.search || DEFAULT_Q;
+  const search = filters.search?.trim();
   const params = {
-    q,
-    size: BATCH_SIZE,
-    highlight: false,
-    sort: 'crawled',
-    order: 'desc',
-    webz_reporter: true,
-    includeSyndicated: false,
-    allowNewsHistory: false,
+    language: 'en',
+    order_by: 'recent',
   };
-  if (filters.dateFrom) params.ts = new Date(filters.dateFrom).getTime();
+  if (search && search !== DEFAULT_Q) params.in_title = search;
+  if (filters.dateFrom) {
+    params.published_after = new Date(`${filters.dateFrom}T00:00:00`).toISOString();
+  }
+  if (filters.dateTo) {
+    params.published_before = new Date(`${filters.dateTo}T23:59:59.999`).toISOString();
+  }
 
   let collected = [];
   let analyzedArticles = [];
