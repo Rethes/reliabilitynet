@@ -134,7 +134,7 @@ export async function batchPredictReliability(articles, onBatch) {
   if (!Array.isArray(articles) || articles.length === 0) return articles;
 
   try {
-    const response = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(1500) });
+    const response = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(5000) });
     if (!response.ok || (await response.json()).status !== 'healthy') {
       console.warn('[Reliability API] Model service is offline. Skipping reliability analysis.');
       return publishBatches(articles.map(withEmptyModelOutputs), onBatch);
