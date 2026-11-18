@@ -34,6 +34,7 @@ CLICKBAIT_MODEL_PATH = os.environ.get("CLICKBAIT_MODEL_PATH", "./roberta_large_c
 META_MODEL_PATH = os.environ.get("META_MODEL_PATH", "./meta_logistic_regression_model")
 PORT = int(os.environ.get("PORT", 5001))
 ML_API_KEY = os.environ.get("ML_API_KEY") or None
+MAX_SENTIMENT_BODY_CHARS = 500
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in (os.environ.get("ALLOWED_ORIGINS") or "http://localhost:5173").split(",")
@@ -142,6 +143,18 @@ def get_clickbait_label(idx):
     """
     return CLICKBAIT_LABEL_MAP.get(idx, "Clickbait" if idx == 1 else "Not Clickbait")
 
+
+def article_sentiment_text(article):
+    title = article.get("title") or ""
+    body = article.get("body") or article.get("description") or article.get("text") or ""
+    if not isinstance(title, str):
+        title = ""
+    if not isinstance(body, str):
+        body = ""
+    body = body[:MAX_SENTIMENT_BODY_CHARS]
+    return f"{title}\n{body}" if body else title
+
+
 # -----------------------------------------------------------------------------
 # 4) Flask application setup
 # -----------------------------------------------------------------------------
@@ -180,7 +193,7 @@ def index():
         "endpoints": {
             "GET /": "Service info",
             "GET /health": "Health status and model capabilities",
-            "POST /predict/sentiment": "Predict sentiment using article titles only",
+            "POST /predict/sentiment": "Predict sentiment using article titles and up to 500 body characters",
             "POST /predict/clickbait": "Predict clickbait status specifically for article titles",
             "POST /predict/reliability": "Predict reliability score for article titles"
 
@@ -202,7 +215,7 @@ def health():
         "endpoints": {
             "GET /": "Service info",
             "GET /health": "Health status and model capabilities",
-            "POST /predict/sentiment": "Predict sentiment using article titles only",
+            "POST /predict/sentiment": "Predict sentiment using article titles and up to 500 body characters",
             "POST /predict/clickbait": "Predict clickbait status specifically for article titles",
             "POST /predict/reliability": "Predict reliability score for article titles"
         },
@@ -327,8 +340,8 @@ def predict_get():
         "message": "Send a POST request with JSON payload to analyze articles for sentiment only.",
         "example_payload": {
             "articles": [
-                {"title": "10 SHOCKING facts you won't believe!", "text": "Example content"},
-                {"title": "Federal Reserve updates interest rate guidance", "text": "Official economic news"}
+                {"title": "10 SHOCKING facts you won't believe!", "body": "Example article content"},
+                {"title": "Federal Reserve updates interest rate guidance", "body": "Official economic news"}
             ]
         }
     })
@@ -341,7 +354,8 @@ def predict_sentiment():
 
     Input JSON can contain either:
         - texts: list of raw text strings
-        - articles: list of article objects; only each article's title is used
+        - articles: list of article objects; sentiment uses the title and up to
+          500 characters from body (or legacy description/text fields)
 
     Output JSON includes the model label, confidence score, probability breakdown,
     and the article title or article id for each item.
@@ -350,16 +364,14 @@ def predict_sentiment():
     texts = data.get('texts', [])
     articles = data.get('articles', [])
 
-    # Article-object requests use titles only, matching the sentiment model's
-    # title-based training input. Raw text requests remain supported.
+    # Raw text requests remain supported for clients that do not send articles.
     if articles:
-        texts = [article.get("title") or "" for article in articles]
+        texts = [article_sentiment_text(article) for article in articles]
 
     if not texts:
         return jsonify({"error": "No texts or articles provided for prediction"}), 400
 
     try:
-        # Tokenize only the title for sentiment inference.
         inputs = sentiment_tokenizer(
             texts,
             padding=True,
@@ -425,11 +437,8 @@ def predict_reliability():
     """
     data = request.get_json(silent=True) or {}
     articles = data.get('articles', [])
-    texts = (
-        [article.get('title') or '' for article in articles]
-        if articles
-        else data.get('texts', [])
-    )
+    texts = [article.get('title') or '' for article in articles] if articles else data.get('texts', [])
+    sentiment_texts = [article_sentiment_text(article) for article in articles] if articles else texts
     titles = texts
 
     if not texts:
@@ -439,10 +448,10 @@ def predict_reliability():
         # ---------------------------------------------------------------------
         # Step 1: sentiment inference
         # ---------------------------------------------------------------------
-        # Sentiment inference uses only article titles, matching the model's
-        # title-based training input. The meta-classifier also uses titles only.
+        # Sentiment includes article body; clickbait and meta-classifier inputs
+        # remain title-based.
         inputs = sentiment_tokenizer(
-            titles,
+            sentiment_texts,
             padding=True,
             truncation=True,
             max_length=512,
@@ -559,10 +568,22 @@ def predict_reliability():
                 "available": meta_prediction["available"]
             }
 
+            article_input = articles[i] if articles and i < len(articles) else None
+            if article_input is not None:
+                article_text = article_input.get("text")
+                if article_text is None:
+                    article_text = article_input.get("body")
+                if article_text is None:
+                    article_text = article_input.get("description")
+                if article_text is None:
+                    article_text = text
+            else:
+                article_text = text
+
             res = {
                 "uuid": articles[i].get("uuid") if articles and i < len(articles) else None,
                 "title": articles[i].get("title", text) if articles and i < len(articles) else text,
-                "text": text,
+                "text": article_text,
                 "sentiment": sentiment_result,
                 "clickbait": clickbait_result,
                 "reliability": meta_result

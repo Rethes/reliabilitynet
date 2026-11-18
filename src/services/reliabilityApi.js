@@ -146,7 +146,7 @@ export async function batchPredictReliability(articles, onBatch) {
       const payload = batch.map(article => ({
         uuid: article.uuid || article.url,
         title: article.title || '',
-        description: article.text || article.highlightText || article.thread?.title || '',
+        body: (article.text || article.highlightText || article.thread?.title || '').slice(0, 500),
       }));
 
       try {
