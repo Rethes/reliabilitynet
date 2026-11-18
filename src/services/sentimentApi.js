@@ -35,7 +35,7 @@ export async function batchPredictSentiment(articles) {
       const payload = batch.map(a => ({
         uuid: a.uuid || a.url,
         title: a.title || '',
-        description: a.text || a.highlightText || a.thread?.title || ''
+        body: (a.text || a.highlightText || a.thread?.title || '').slice(0, 500)
       }));
 
       try {

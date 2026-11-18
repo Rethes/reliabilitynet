@@ -184,6 +184,7 @@
   font-size: 0.95rem;
   color: var(--text2);
   line-height: 1.75;
+  white-space: pre-line;
 }
 
 .descEmpty {

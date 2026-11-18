@@ -168,6 +168,9 @@ Key endpoints include:
 - `POST /predict/clickbait`
 - `POST /predict/reliability`
 
+Sentiment predictions for article objects use the title plus up to 500
+characters of the article body. Raw `texts` requests remain supported.
+
 The frontend relies on this service to enrich article cards with reliability signals.
 In local development, the frontend talks directly to this service. With
 `VITE_API_BASE` set, it uses the Cloudflare Worker ML relay instead.
