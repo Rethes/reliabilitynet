@@ -5,7 +5,7 @@ const ANALYSIS_BATCH_SIZE = 10;
 
 export async function checkSentimentServer() {
   try {
-    const res = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
     const data = await res.json();
     return data.status === 'healthy';

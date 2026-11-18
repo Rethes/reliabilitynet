@@ -17,7 +17,7 @@ The project is split into three runtime services:
 - Backend: Node.js, Express
 - ML inference: Python, Flask, Hugging Face Transformers
 - Database: SQLite for saved articles and user auth data
-- Models: local RoBERTa checkpoints and a meta-classifier stored in the repo
+- Models: local RoBERTa checkpoints and a meta-classifier ([available on Hugging Face](https://huggingface.co/rethes/ReliabilityNet))
 
 ## Repository structure
 
@@ -26,20 +26,30 @@ ReliabilityNet/
 ├── README.md                      # Project overview and setup instructions
 ├── LICENSE.md                     # MIT License
 ├── AUTH_SETUP.md                  # Auth backend setup details
+├── DEPLOY_INVENTORY.md            # Deployment audit and route inventory
 ├── .gitignore                     # Files ignored by Git
 ├── .env.example                   # Template for local environment variables
+├── model-server.env.example       # Template for model server local key configuration
 ├── package.json                   # Frontend app scripts and dependencies
 ├── vite.config.js                 # Vite frontend config
 ├── index.html                     # Main HTML shell for the React app
+├── news-provider.js               # Shared FreeNewsApi client and data normalizer
 ├── proxy-server.js                # Local FreeNewsApi proxy for fetching news
 ├── model_server.py                # Flask ML API for sentiment, clickbait, and reliability
 ├── requirements.txt               # Python dependencies for the model server
 ├── start-all.sh                   # Starts proxy, backend, ML API, and frontend together
-├── server/
+├── deployment/                    # Cloudflare Tunnel configuration templates
+│   └── cloudflared/
+│       └── config.yml.example
+├── scripts/                       # Startup scripts for model server & tunnels
+│   ├── start-model-server.sh      # Starts Flask ML service with API key verification
+│   ├── start-model-quick-tunnel.sh# Ephemeral Cloudflare Quick Tunnel for Mac testing
+│   └── start-model-tunnel.sh      # Named Cloudflare Tunnel for custom domains
+├── server/                        # Local Express auth & SQLite backend
 │   ├── index.js                   # Express auth API and saved-article storage
 │   ├── package.json               # Backend scripts and dependencies
 │   └── data.db                    # SQLite database for users and saved articles
-├── src/
+├── src/                           # React frontend application
 │   ├── App.jsx                    # Main React app layout and page logic
 │   ├── main.jsx                   # React app entry point
 │   ├── App.module.css             # App-level styling
@@ -47,14 +57,19 @@ ReliabilityNet/
 │   ├── components/                # Reusable UI elements (cards, modals, badges, etc.)
 │   ├── context/                   # Shared app state and auth context
 │   ├── hooks/                     # Data-fetching and filtering logic
-│   ├── services/                  # API calls for news and auth
+│   ├── services/                  # API clients (news, reliability, sentiment, auth)
 │   └── utils/                     # Helper functions and formatting utilities
+├── worker/                        # Cloudflare Worker for production API routing
+│   ├── wrangler.jsonc             # Wrangler configuration and bindings
+│   ├── package.json               # Worker dependencies and scripts
+│   ├── migrations/                # D1 database schema migrations
+│   ├── src/                       # Worker routes (news, auth, articles, ML relay)
+│   └── test/                      # Worker integration tests
 ├── meta_logistic_regression_model/ # Meta model used for combined reliability scoring
 ├── roberta_sentiment_model/       # Local sentiment model checkpoint
 ├── roberta_large_clickbait_model/ # Local clickbait detection model checkpoint
 ├── model_env/                     # Python virtual environment for model inference
-├── tests/                         # Smoke test for flask endpoint
-└── node_modules/                  # Installed frontend dependencies
+└── tests/                         # Unit and security test suites
 ```
 
 ## Prerequisites
@@ -62,7 +77,7 @@ ReliabilityNet/
 - Node.js 18+
 - Python 3.10+
 - A FreeNewsApi API key
-- Local model artifacts in the repo root
+- Local model weights in the repository root ([available on Hugging Face](https://huggingface.co/rethes/ReliabilityNet))
 
 ## Setup
 
@@ -88,7 +103,17 @@ source model_env/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Download model weights
+
+The pre-trained model checkpoints are hosted on Hugging Face:
+👉 **[https://huggingface.co/rethes/ReliabilityNet](https://huggingface.co/rethes/ReliabilityNet)**
+
+Download or clone the three model directories into the repository root:
+- `roberta_sentiment_model/`: Fine-tuned RoBERTa sequence classification checkpoint for sentiment analysis.
+- `roberta_large_clickbait_model/`: Fine-tuned RoBERTa Large sequence classification checkpoint for headline sensationalism detection.
+- `meta_logistic_regression_model/`: Scikit-learn meta-classifier pipeline for combined reliability scoring.
+
+### 5. Configure environment variables
 
 Copy the example file to create a local `.env` file:
 
@@ -154,22 +179,21 @@ Then open http://localhost:5173
 
 ## Model server
 
-The Python service in `model_server.py` loads the project’s local Hugging Face checkpoints for:
+The Python service in `model_server.py` loads the project’s local Hugging Face checkpoints ([hosted on Hugging Face](https://huggingface.co/rethes/ReliabilityNet)) for:
 
-- sentiment detection
-- clickbait detection
-- meta-classification aggregation
+- sentiment detection (RoBERTa)
+- clickbait detection (RoBERTa Large)
+- meta-classification reliability scoring (Logistic Regression)
 
 Key endpoints include:
 
-- `GET /`
-- `GET /health`
-- `POST /predict/sentiment`
-- `POST /predict/clickbait`
-- `POST /predict/reliability`
+- `GET /`: Service information and available routes
+- `GET /health`: Health status and model capabilities
+- `POST /predict/sentiment`: Predicts sentiment (negative, neutral, positive) using the article title plus up to 500 characters of the body.
+- `POST /predict/clickbait`: Predicts clickbait status specifically for article titles.
+- `POST /predict/reliability`: Runs all three inference steps in sequence. Sentiment uses the title plus up to 500 body characters, while clickbait and the meta-classifier evaluate the title. The response echoes the article `text` matching the input JSON payload.
 
-Sentiment predictions for article objects use the title plus up to 500
-characters of the article body. Raw `texts` requests remain supported.
+Sentiment predictions for article objects use the headline plus up to 500 characters of the article body (falling back to `description` or `text` if `body` is not provided). The React UI modal (`ArticleModal.jsx`) displays the exact 500-character body analyzed by the model, formatted with paragraph line breaks and an ellipsis (`...`) when truncated, ensuring inputs can be cleanly replicated in Postman. Raw `texts` array requests remain supported for backwards compatibility.
 
 The frontend relies on this service to enrich article cards with reliability signals.
 In local development, the frontend talks directly to this service. With
@@ -341,5 +365,5 @@ npm start
 ## Notes
 
 - The project expects Node.js 18+ and a local Python environment for model inference.
-- The ML model directories must remain in the repository root for the app to function correctly.
+- The ML model directories (`roberta_sentiment_model/`, `roberta_large_clickbait_model/`, `meta_logistic_regression_model/`) must remain in the repository root (downloadable from [Hugging Face](https://huggingface.co/rethes/ReliabilityNet)) for the app to function correctly.
 - Additional auth and runtime details are documented in [AUTH_SETUP.md](AUTH_SETUP.md).
