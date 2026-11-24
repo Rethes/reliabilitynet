@@ -6,13 +6,17 @@ Provider-specific findings below have been updated for the FreeNewsApi migration
 
 - Current branch: `deployment` (the requested branch restriction). The deployment plan asks for a new `deploy-cloudflare` branch; that instruction was not followed because the owner explicitly limited work to `deployment`.
 - The repository now includes a Cloudflare Worker API, Wrangler configuration, and a D1 migration under `worker/`.
-- The app currently consists of a Vite/React frontend, a Node news proxy, a Cloudflare Worker API, an Express/SQLite auth-and-saves server, and a local Flask model server.
+- The production deployment is live:
+  - Frontend: Cloudflare Pages (`https://reliabilitynet.pages.dev`)
+  - API Gateway: Cloudflare Worker (`https://reliabilitynet-api-production.rethesmutua.workers.dev`)
+  - Database: Cloudflare D1 (`reliabilitynet-db`)
+  - ML Inference: Hosted on Kaggle GPU (`kaggle-gradio-notebook.ipynb`), downloading models from Hugging Face (`rethes/ReliabilityNet`), and tunneled via static ngrok domain (`https://jockstrap-track-paradox.ngrok-free.dev`)
 - Relevant deployment findings:
   - `FREENEWS_API_KEY` is read server-side by the local proxy and Cloudflare Worker; it is sent to FreeNewsApi in the `x-api-key` header and is not included in the browser bundle.
   - The news proxy forwards only supported search parameters, restricts local CORS to the Vite origin, and uses a fixed FreeNewsApi origin.
-  - The Express server has a hardcoded fallback JWT signing secret if `JWT_SECRET` is absent.
-  - The Flask server allows cross-origin requests without a key. The feed calls its reliability endpoint for anonymous visitors, so requiring login for ML would change the current logged-out experience; an access policy must be chosen before implementing the relay.
-  - Existing SQLite data and model artifacts are local and ignored by git. No database or model files are tracked.
+  - The Express server has a hardcoded fallback JWT signing secret if `JWT_SECRET` is absent; the production Worker requires `JWT_SECRET` as a Cloudflare secret.
+  - The Worker relays ML requests (`/api/ml/*`) to `ML_ORIGIN` (`https://jockstrap-track-paradox.ngrok-free.dev`) with an IP rate limit of 30 req/min and CORS enforcement for `https://reliabilitynet.pages.dev`.
+  - Existing SQLite data and model artifacts are local and ignored by git. Production user accounts and saved articles reside in Cloudflare D1.
   - `start-all.sh` runs all four local services, but first sends `kill -9` to any process using ports 3131, 4000, 5001, or 5173. This can affect unrelated local processes using those ports.
 - The frontend build succeeds. A real 10-article reliability request completed in 11.04 seconds in this environment, well below a 90-second relay timeout; this is a local observation, not a Cloudflare latency guarantee.
 
@@ -49,7 +53,10 @@ No client-side router dependency or route usage was found, so the current fronte
 |---|---|---|---|
 | `FREENEWS_API_KEY` | `proxy-server.js` via `process.env`; `worker/src/index.js` via `c.env`; set in local `.env`, `worker/.dev.vars`, or as a Worker secret | Yes | Sent server-side to FreeNewsApi in the `x-api-key` header. It is not sent to the browser. |
 | `VITE_API_BASE` | `src/services/apiConfig.js` via `import.meta.env`; `.env.example` | No | Selects the deployed Worker API origin for the frontend. |
-| `JWT_SECRET` | `server/index.js:10` via `process.env` | Yes | Signs and verifies JWTs, but falls back to a hardcoded development secret when unset. |
+| `VITE_ML_BASE` | `src/services/apiConfig.js` via `import.meta.env`; `.env.example` | No | Optional direct ML server override (takes priority over `VITE_API_BASE` Worker relay). |
+| `JWT_SECRET` | `server/index.js:10` via `process.env`; Worker via `c.env.JWT_SECRET` | Yes | Signs and verifies JWTs (fallback in local dev Express, required secret in Cloudflare Worker). |
+| `ML_ORIGIN` | `worker/wrangler.jsonc` via `vars.ML_ORIGIN`; `worker/src/ml.js` via `c.env` | No | Origin URL of the ML inference server (set to `https://jockstrap-track-paradox.ngrok-free.dev`). |
+| `ML_API_KEY` | `model_server.py`; `worker/src/ml.js` via `c.env.ML_API_KEY` | Yes | API key sent in `X-ML-Key` header between Cloudflare Worker and Flask model server. |
 | `SENTIMENT_MODEL_PATH` | `model_server.py:31` via `os.environ.get` | No | Sentiment model directory; default is a local relative path. |
 | `CLICKBAIT_MODEL_PATH` | `model_server.py:32` via `os.environ.get` | No | Clickbait model directory; default is a local relative path. |
 | `META_MODEL_PATH` | `model_server.py:33` via `os.environ.get` | No | Meta-classifier model directory; default is a local relative path. |

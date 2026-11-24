@@ -4,20 +4,28 @@ ReliabilityNet is a full-stack news intelligence app that combines live article 
 
 ## Overview
 
-The project is split into three runtime services:
+The project can be run in two modes:
 
-- Frontend: React + Vite app in the root project and `src/` directory
-- Auth backend: Express app in `server/` for login, profile management, and saved articles
-- ML backend: Flask service in `model_server.py` for sentiment, clickbait, and reliability predictions
-- News proxy: lightweight Node service that forwards FreeNewsApi requests
+### Local Development Mode
+- **Frontend**: React + Vite app in the root project and `src/` directory (http://localhost:5173)
+- **Auth backend**: Express app in `server/` with local SQLite (`data.db`) (http://localhost:4000)
+- **ML backend**: Flask service in `model_server.py` for sentiment, clickbait, and reliability predictions (http://localhost:5001)
+- **News proxy**: lightweight Node service in `proxy-server.js` that forwards FreeNewsApi requests (http://localhost:3131)
+
+### Production Deployment Mode
+- **Frontend**: Hosted on **Cloudflare Pages** at [https://reliabilitynet.pages.dev](https://reliabilitynet.pages.dev)
+- **API Gateway & Auth**: Hosted on **Cloudflare Workers** at `https://reliabilitynet-api-production.rethesmutua.workers.dev` with serverless **Cloudflare D1** SQLite database
+- **News API**: Server-side proxy on Cloudflare Workers calling FreeNewsApi
+- **ML Runtime**: Hosted on **Kaggle GPU** (via `kaggle-gradio-notebook.ipynb`) pulling checkpoints from Hugging Face, exposed via a fixed **ngrok tunnel** (`https://jockstrap-track-paradox.ngrok-free.dev`) and relayed through Cloudflare Workers
 
 ## Tech stack
 
-- Frontend: React, Vite
-- Backend: Node.js, Express
-- ML inference: Python, Flask, Hugging Face Transformers
-- Database: SQLite for saved articles and user auth data
-- Models: local RoBERTa checkpoints and a meta-classifier ([available on Hugging Face](https://huggingface.co/rethes/ReliabilityNet))
+- **Frontend**: React 19, Vite, CSS Modules
+- **Backend (Local)**: Node.js, Express, better-sqlite3
+- **Backend (Production)**: Cloudflare Workers (Hono), Cloudflare D1 (SQLite), Cloudflare Pages
+- **ML Inference**: Python, Flask, Hugging Face Transformers, PyTorch (CUDA / CPU), Scikit-Learn
+- **Model Hosting & Compute**: Hugging Face Hub ([rethes/ReliabilityNet](https://huggingface.co/rethes/ReliabilityNet)), Kaggle GPU runtime, ngrok tunnel, Gradio UI
+- **News Data**: FreeNewsApi (`api.freenewsapi.io`)
 
 ## Repository structure
 
@@ -36,6 +44,7 @@ ReliabilityNet/
 ├── news-provider.js               # Shared FreeNewsApi client and data normalizer
 ├── proxy-server.js                # Local FreeNewsApi proxy for fetching news
 ├── model_server.py                # Flask ML API for sentiment, clickbait, and reliability
+├── kaggle-gradio-notebook.ipynb   # Kaggle notebook for GPU model inference + ngrok/Gradio
 ├── requirements.txt               # Python dependencies for the model server
 ├── start-all.sh                   # Starts proxy, backend, ML API, and frontend together
 ├── deployment/                    # Cloudflare Tunnel configuration templates
@@ -43,7 +52,7 @@ ReliabilityNet/
 │       └── config.yml.example
 ├── scripts/                       # Startup scripts for model server & tunnels
 │   ├── start-model-server.sh      # Starts Flask ML service with API key verification
-│   ├── start-model-quick-tunnel.sh# Ephemeral Cloudflare Quick Tunnel for Mac testing
+│   ├── start-model-quick-tunnel.sh # Ephemeral Cloudflare Quick Tunnel for Mac testing
 │   └── start-model-tunnel.sh      # Named Cloudflare Tunnel for custom domains
 ├── server/                        # Local Express auth & SQLite backend
 │   ├── index.js                   # Express auth API and saved-article storage
@@ -246,54 +255,69 @@ named Cloudflare Tunnel on macOS:
    same `ML_API_KEY` as a Worker secret. Do not copy tunnel credentials or keys
    into the repository.
 
-## Cloudflare deployment without a custom domain
+## Production Cloudflare & Kaggle deployment
 
-The production frontend and API can use Cloudflare-provided subdomains when you
-do not control a custom domain:
+The production architecture runs entirely on free-tier cloud infrastructure:
 
-- Pages: `https://reliabilitynet.pages.dev`
-- Worker: `https://reliabilitynet-api-production.rethesmutua.workers.dev`
+- **Frontend**: Cloudflare Pages at [https://reliabilitynet.pages.dev](https://reliabilitynet.pages.dev)
+- **API Gateway**: Cloudflare Worker at `https://reliabilitynet-api-production.rethesmutua.workers.dev`
+- **Database**: Cloudflare D1 serverless SQLite (`reliabilitynet-db`)
+- **ML Inference**: Kaggle GPU (Tesla T4) running `kaggle-gradio-notebook.ipynb`, downloading weights from Hugging Face (`rethes/ReliabilityNet`), and tunneled via static ngrok domain `https://jockstrap-track-paradox.ngrok-free.dev`
 
-The production Worker allows the Pages origin and uses its `workers.dev`
-hostname. Build the frontend with `VITE_API_BASE` set to the deployed Worker URL,
-then deploy the `dist` directory to the `reliabilitynet` Pages project. Do not
-include a trailing slash in `VITE_API_BASE`.
+### Cloudflare deployment workflow
 
-The ML relay remains unavailable until the model service has a stable HTTPS
-hostname. For temporary end-to-end testing against models running on your Mac,
-use the protected Cloudflare Quick Tunnel scripts below. Quick Tunnel URLs are
-ephemeral and require your Mac, model server, and tunnel process to stay online;
-they are not a reliable production hosting option.
-
-### Temporary model Quick Tunnel
-
-On the `deployment` branch, from the repository root, open two Terminal windows:
-
-1. Start the model server with its local key:
-
+1. **Deploy the Worker API**:
    ```bash
-   ./scripts/start-model-server.sh
+   cd worker
+   npm install
+   npx wrangler d1 migrations apply reliabilitynet-db --remote
+   npx wrangler secret put FREENEWS_API_KEY
+   npx wrangler secret put JWT_SECRET
+   npx wrangler secret put ML_API_KEY
+   npx wrangler deploy --env production
+   cd ..
+   ```
+   The Worker is configured in `worker/wrangler.jsonc` with:
+   - `ALLOWED_ORIGINS`: `https://reliabilitynet.pages.dev`
+   - `ML_ORIGIN`: `https://jockstrap-track-paradox.ngrok-free.dev`
+   - `ML_RATE_LIMITER`: 30 requests / 60 seconds per IP
+
+2. **Build and deploy the Frontend (Cloudflare Pages)**:
+   ```bash
+   # Build with the production Worker API base
+   VITE_API_BASE=https://reliabilitynet-api-production.rethesmutua.workers.dev npm run build
+
+   # Deploy to Cloudflare Pages
+   ./worker/node_modules/.bin/wrangler pages deploy dist --project-name reliabilitynet --branch deployment
    ```
 
-   The script reads `ML_API_KEY` from the ignored `model-server.env`, tightens
-   the file permissions, and refuses to start if the key is missing. Keep this
-   terminal open.
-2. In the second terminal, start the Quick Tunnel:
+### Running the ML models on Kaggle
 
-   ```bash
-   ./scripts/start-model-quick-tunnel.sh
+Whenever you want live article scoring on [https://reliabilitynet.pages.dev](https://reliabilitynet.pages.dev):
+
+1. Open `kaggle-gradio-notebook.ipynb` in **Kaggle**.
+2. In the right panel under **Session options**:
+   - **Internet** ➔ **On** (required for pip, Hugging Face, ngrok, Gradio)
+   - **Accelerator** ➔ **GPU** (e.g. GPU T4 x2)
+3. Under **Add-ons → Secrets**, ensure the **`NGROK_TOKEN`** secret is checked.
+4. Run the notebook cells (Cell 1 through Cell 8).
+5. Verify Cell 7 prints:
    ```
+   🌍 Public Flask API URL: https://jockstrap-track-paradox.ngrok-free.dev
+      Health check: https://jockstrap-track-paradox.ngrok-free.dev/health
+   ```
+6. Open [https://reliabilitynet.pages.dev](https://reliabilitynet.pages.dev). Because `jockstrap-track-paradox.ngrok-free.dev` is a static domain already configured in the Cloudflare Worker, the app immediately connects and displays live reliability scores, sentiment, and clickbait analysis.
 
-   This verifies that the local model server requires the key, checks that the
-   production Worker has its matching `ML_API_KEY` secret, starts `cloudflared`,
-   and redeploys the Worker with the newly issued tunnel URL. It then checks the
-   Worker-to-model health route. Keep this terminal open too.
-3. Open `https://reliabilitynet.pages.dev` and verify article predictions. Press
-   Ctrl+C in the tunnel terminal to stop it.
+> **Note**: Do not run the Teardown cell while using the app, as it terminates the background Flask server and ngrok tunnel.
 
-The Quick Tunnel URL changes when recreated. Run both scripts again after
-restarting the tunnel; the second script updates the Worker automatically. Never
-put model keys or tunnel URLs in frontend environment variables or commit them.
+---
+
+### Alternative: local development with Cloudflare Tunnels
+
+If you prefer to run models locally on your Mac instead of Kaggle:
+
+1. **Named tunnel**: Use `scripts/start-model-tunnel.sh` and configure `ML_ORIGIN` to your custom hostname.
+2. **Quick tunnel**: Use `./scripts/start-model-quick-tunnel.sh` for an ephemeral `trycloudflare.com` tunnel.
 
 ## Auth and saved articles
 
