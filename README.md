@@ -1,6 +1,6 @@
 # ReliabilityNet
 
-ReliabilityNet is a full-stack news intelligence app that combines live article discovery with AI-powered reliability scoring. It pulls headlines from Webz.io, runs sentiment and misinformation checks through local transformer models, and presents the results in a React UI for browsing, filtering, saving, and reviewing articles.
+ReliabilityNet is a full-stack news intelligence app that combines live article discovery with AI-powered reliability scoring. It pulls headlines from FreeNewsApi, runs sentiment and misinformation checks through local transformer models, and presents the results in a React UI for browsing, filtering, saving, and reviewing articles.
 
 ## Overview
 
@@ -9,7 +9,7 @@ The project is split into three runtime services:
 - Frontend: React + Vite app in the root project and `src/` directory
 - Auth backend: Express app in `server/` for login, profile management, and saved articles
 - ML backend: Flask service in `model_server.py` for sentiment, clickbait, and reliability predictions
-- News proxy: lightweight Node service that forwards Webz.io requests
+- News proxy: lightweight Node service that forwards FreeNewsApi requests
 
 ## Tech stack
 
@@ -17,7 +17,7 @@ The project is split into three runtime services:
 - Backend: Node.js, Express
 - ML inference: Python, Flask, Hugging Face Transformers
 - Database: SQLite for saved articles and user auth data
-- Models: local RoBERTa checkpoints and a meta-classifier stored in the repo
+- Models: local RoBERTa checkpoints and a meta-classifier ([available on Hugging Face](https://huggingface.co/rethes/ReliabilityNet))
 
 ## Repository structure
 
@@ -26,20 +26,30 @@ ReliabilityNet/
 ├── README.md                      # Project overview and setup instructions
 ├── LICENSE.md                     # MIT License
 ├── AUTH_SETUP.md                  # Auth backend setup details
+├── DEPLOY_INVENTORY.md            # Deployment audit and route inventory
 ├── .gitignore                     # Files ignored by Git
 ├── .env.example                   # Template for local environment variables
+├── model-server.env.example       # Template for model server local key configuration
 ├── package.json                   # Frontend app scripts and dependencies
 ├── vite.config.js                 # Vite frontend config
 ├── index.html                     # Main HTML shell for the React app
-├── proxy-server.js                # Local Webz.io proxy for fetching news
+├── news-provider.js               # Shared FreeNewsApi client and data normalizer
+├── proxy-server.js                # Local FreeNewsApi proxy for fetching news
 ├── model_server.py                # Flask ML API for sentiment, clickbait, and reliability
 ├── requirements.txt               # Python dependencies for the model server
 ├── start-all.sh                   # Starts proxy, backend, ML API, and frontend together
-├── server/
+├── deployment/                    # Cloudflare Tunnel configuration templates
+│   └── cloudflared/
+│       └── config.yml.example
+├── scripts/                       # Startup scripts for model server & tunnels
+│   ├── start-model-server.sh      # Starts Flask ML service with API key verification
+│   ├── start-model-quick-tunnel.sh# Ephemeral Cloudflare Quick Tunnel for Mac testing
+│   └── start-model-tunnel.sh      # Named Cloudflare Tunnel for custom domains
+├── server/                        # Local Express auth & SQLite backend
 │   ├── index.js                   # Express auth API and saved-article storage
 │   ├── package.json               # Backend scripts and dependencies
 │   └── data.db                    # SQLite database for users and saved articles
-├── src/
+├── src/                           # React frontend application
 │   ├── App.jsx                    # Main React app layout and page logic
 │   ├── main.jsx                   # React app entry point
 │   ├── App.module.css             # App-level styling
@@ -47,22 +57,27 @@ ReliabilityNet/
 │   ├── components/                # Reusable UI elements (cards, modals, badges, etc.)
 │   ├── context/                   # Shared app state and auth context
 │   ├── hooks/                     # Data-fetching and filtering logic
-│   ├── services/                  # API calls for news and auth
+│   ├── services/                  # API clients (news, reliability, sentiment, auth)
 │   └── utils/                     # Helper functions and formatting utilities
+├── worker/                        # Cloudflare Worker for production API routing
+│   ├── wrangler.jsonc             # Wrangler configuration and bindings
+│   ├── package.json               # Worker dependencies and scripts
+│   ├── migrations/                # D1 database schema migrations
+│   ├── src/                       # Worker routes (news, auth, articles, ML relay)
+│   └── test/                      # Worker integration tests
 ├── meta_logistic_regression_model/ # Meta model used for combined reliability scoring
 ├── roberta_sentiment_model/       # Local sentiment model checkpoint
 ├── roberta_large_clickbait_model/ # Local clickbait detection model checkpoint
 ├── model_env/                     # Python virtual environment for model inference
-├── tests/                         # Smoke test for flask endpoint
-└── node_modules/                  # Installed frontend dependencies
+└── tests/                         # Unit and security test suites
 ```
 
 ## Prerequisites
 
 - Node.js 18+
 - Python 3.10+
-- A Webz.io API key
-- Local model artifacts in the repo root
+- A FreeNewsApi API key
+- Local model weights in the repository root ([available on Hugging Face](https://huggingface.co/rethes/ReliabilityNet))
 
 ## Setup
 
@@ -88,7 +103,17 @@ source model_env/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Download model weights
+
+The pre-trained model checkpoints are hosted on Hugging Face:
+👉 **[https://huggingface.co/rethes/ReliabilityNet](https://huggingface.co/rethes/ReliabilityNet)**
+
+Download or clone the three model directories into the repository root:
+- `roberta_sentiment_model/`: Fine-tuned RoBERTa sequence classification checkpoint for sentiment analysis.
+- `roberta_large_clickbait_model/`: Fine-tuned RoBERTa Large sequence classification checkpoint for headline sensationalism detection.
+- `meta_logistic_regression_model/`: Scikit-learn meta-classifier pipeline for combined reliability scoring.
+
+### 5. Configure environment variables
 
 Copy the example file to create a local `.env` file:
 
@@ -97,9 +122,9 @@ cp .env.example .env
 ```
 
 Notes:
+- Set `FREENEWS_API_KEY` in `.env` for the local news proxy. It is read only by the proxy process and is never sent to the browser.
 
-- Replace the `VITE_API_KEY` placeholder in `.env` with your Webz.io API key. It is required for live news fetching.
-- Vite loads `VITE_API_KEY` from the project-root `.env` file. Restart the frontend after changing it.
+- Leave `VITE_API_BASE` empty for local development. For a deployed frontend, set it to the Worker origin (for example, `https://api.example.com`) and rebuild.
 - The auth server reads `JWT_SECRET` from its process environment; it does not load the root `.env` file. To override the local development default, export `JWT_SECRET` in the terminal before starting the services.
 
 ## Run the app
@@ -124,6 +149,9 @@ Open multiple terminals.
 Terminal 1 - proxy:
 
 ```bash
+set -a
+. ./.env
+set +a
 node proxy-server.js
 ```
 
@@ -151,21 +179,121 @@ Then open http://localhost:5173
 
 ## Model server
 
-The Python service in `model_server.py` loads the project’s local Hugging Face checkpoints for:
+The Python service in `model_server.py` loads the project’s local Hugging Face checkpoints ([hosted on Hugging Face](https://huggingface.co/rethes/ReliabilityNet)) for:
 
-- sentiment detection
-- clickbait detection
-- meta-classification aggregation
+- sentiment detection (RoBERTa)
+- clickbait detection (RoBERTa Large)
+- meta-classification reliability scoring (Logistic Regression)
 
 Key endpoints include:
 
-- `GET /`
-- `GET /health`
-- `POST /predict/sentiment`
-- `POST /predict/clickbait`
-- `POST /predict/reliability`
+- `GET /`: Service information and available routes
+- `GET /health`: Health status and model capabilities
+- `POST /predict/sentiment`: Predicts sentiment (negative, neutral, positive) using the article title plus up to 500 characters of the body.
+- `POST /predict/clickbait`: Predicts clickbait status specifically for article titles.
+- `POST /predict/reliability`: Runs all three inference steps in sequence. Sentiment uses the title plus up to 500 body characters, while clickbait and the meta-classifier evaluate the title. The response echoes the article `text` matching the input JSON payload.
+
+Sentiment predictions for article objects use the headline plus up to 500 characters of the article body (falling back to `description` or `text` if `body` is not provided). The React UI modal (`ArticleModal.jsx`) displays the exact 500-character body analyzed by the model, formatted with paragraph line breaks and an ellipsis (`...`) when truncated, ensuring inputs can be cleanly replicated in Postman. Raw `texts` array requests remain supported for backwards compatibility.
 
 The frontend relies on this service to enrich article cards with reliability signals.
+In local development, the frontend talks directly to this service. With
+`VITE_API_BASE` set, it uses the Cloudflare Worker ML relay instead.
+
+News retrieval uses FreeNewsApi's `/v1/news` and `/v1/details` endpoints. The
+local proxy and production Worker keep `FREENEWS_API_KEY` server-side and
+translate cursor pagination into same-origin app routes. Article requests are
+throttled to FreeNewsApi's documented two requests per second.
+
+For local development, the model server defaults to allowing browser requests from
+`http://localhost:5173`. If `ML_API_KEY` is unset, direct local API requests remain
+available and the server prints a warning. For deployment, set `ML_API_KEY` on the
+model server and configure the same value as the Worker secret; the Worker sends it
+as `X-ML-Key` and does not expose it to browsers. Set `ALLOWED_ORIGINS` to a
+comma-separated list of exact frontend origins. The Worker limits ML requests to
+30 per IP per minute, with a 1 MiB request-body cap and a 90-second upstream
+timeout. Cloudflare applies approximate per-location limits, so people sharing an
+IP address may share a quota. Before deployment, verify the Worker rate-limit
+namespace ID in `worker/wrangler.jsonc` is unique within the Cloudflare account.
+
+To test the Worker relay locally, copy `worker/.env.example` to
+`worker/.dev.vars`, set `FREENEWS_API_KEY` and a random `ML_API_KEY` there, and
+set the same ML key in the model server environment before starting it. For
+production, configure the news key with `npx wrangler secret put FREENEWS_API_KEY`
+from the `worker/` directory. The model server does not load an environment file
+automatically. `.dev.vars` is ignored by Git.
+
+## Named Cloudflare model tunnel
+
+The model service remains bound to loopback on port 5001. To expose it through a
+named Cloudflare Tunnel on macOS:
+
+1. Install `cloudflared` with `brew install cloudflared`, then authenticate with
+   `cloudflared tunnel login`.
+2. Create the named tunnel and route a hostname in your Cloudflare-managed zone:
+
+   ```bash
+   cloudflared tunnel create reliabilitynet-model
+   cloudflared tunnel route dns reliabilitynet-model ml.yourdomain.com
+   ```
+
+3. Copy `deployment/cloudflared/config.yml.example` to
+   `~/.cloudflared/reliabilitynet-model.yml`. Replace the tunnel UUID, credentials
+   file path, and hostname with the values for your account.
+4. Start the model server with `ML_API_KEY` set, export the same key in the shell
+   that runs the tunnel, then run `scripts/start-model-tunnel.sh`. The script
+   validates the tunnel ingress and checks that the loopback model server responds.
+5. Configure the Worker `ML_ORIGIN` as `https://ml.yourdomain.com` and store the
+   same `ML_API_KEY` as a Worker secret. Do not copy tunnel credentials or keys
+   into the repository.
+
+## Cloudflare deployment without a custom domain
+
+The production frontend and API can use Cloudflare-provided subdomains when you
+do not control a custom domain:
+
+- Pages: `https://reliabilitynet.pages.dev`
+- Worker: `https://reliabilitynet-api-production.rethesmutua.workers.dev`
+
+The production Worker allows the Pages origin and uses its `workers.dev`
+hostname. Build the frontend with `VITE_API_BASE` set to the deployed Worker URL,
+then deploy the `dist` directory to the `reliabilitynet` Pages project. Do not
+include a trailing slash in `VITE_API_BASE`.
+
+The ML relay remains unavailable until the model service has a stable HTTPS
+hostname. For temporary end-to-end testing against models running on your Mac,
+use the protected Cloudflare Quick Tunnel scripts below. Quick Tunnel URLs are
+ephemeral and require your Mac, model server, and tunnel process to stay online;
+they are not a reliable production hosting option.
+
+### Temporary model Quick Tunnel
+
+On the `deployment` branch, from the repository root, open two Terminal windows:
+
+1. Start the model server with its local key:
+
+   ```bash
+   ./scripts/start-model-server.sh
+   ```
+
+   The script reads `ML_API_KEY` from the ignored `model-server.env`, tightens
+   the file permissions, and refuses to start if the key is missing. Keep this
+   terminal open.
+2. In the second terminal, start the Quick Tunnel:
+
+   ```bash
+   ./scripts/start-model-quick-tunnel.sh
+   ```
+
+   This verifies that the local model server requires the key, checks that the
+   production Worker has its matching `ML_API_KEY` secret, starts `cloudflared`,
+   and redeploys the Worker with the newly issued tunnel URL. It then checks the
+   Worker-to-model health route. Keep this terminal open too.
+3. Open `https://reliabilitynet.pages.dev` and verify article predictions. Press
+   Ctrl+C in the tunnel terminal to stop it.
+
+The Quick Tunnel URL changes when recreated. Run both scripts again after
+restarting the tunnel; the second script updates the Worker automatically. Never
+put model keys or tunnel URLs in frontend environment variables or commit them.
 
 ## Auth and saved articles
 
@@ -180,7 +308,7 @@ The backend in `server/index.js` provides:
 
 ### News discovery
 
-- live news feed from Webz.io
+- live news feed from FreeNewsApi
 - keyword search
 - category, language, date, and source filtering
 - sorting by newest, oldest, and source
@@ -237,5 +365,5 @@ npm start
 ## Notes
 
 - The project expects Node.js 18+ and a local Python environment for model inference.
-- The ML model directories must remain in the repository root for the app to function correctly.
+- The ML model directories (`roberta_sentiment_model/`, `roberta_large_clickbait_model/`, `meta_logistic_regression_model/`) must remain in the repository root (downloadable from [Hugging Face](https://huggingface.co/rethes/ReliabilityNet)) for the app to function correctly.
 - Additional auth and runtime details are documented in [AUTH_SETUP.md](AUTH_SETUP.md).

@@ -42,12 +42,15 @@ venv*/
 
 # Local project environment and model artifacts
 model_env/
+*.joblib
 meta_logistic_regression_model/
 roberta_sentiment_model/
 roberta_large_fake_news_model/
 roberta_large_clickbait_model/
+model-server.env
 
 # Local databases and generated runtime files
+data.db*
 *.sqlite3
 *.db
 server/data.db
@@ -62,6 +65,15 @@ tmp/
 
 # Local package manager artifacts
 package-lock.json
+!worker/package-lock.json
+
+# Cloudflare local secrets and state
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+/deployment/cloudflared/config.yml
+/deployment/cloudflared/credentials/
 
 # Editor backups
 *.tmp

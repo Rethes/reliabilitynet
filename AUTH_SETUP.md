@@ -8,7 +8,7 @@ The application also uses a Python model server for sentiment, clickbait, and re
 | Server | Port | Purpose |
 |--------|------|---------|
 | Vite dev server | 5173 | React frontend |
-| `proxy-server.js` | 3131 | webz.io API proxy (unchanged) |
+| `proxy-server.js` | 3131 | FreeNewsApi proxy |
 | `server/index.js` | 4000 | Auth + saved articles |
 | `model_server.py` | 5001 | Sentiment, clickbait, and reliability predictions |
 
@@ -36,7 +36,7 @@ Open http://localhost:5173 once the frontend starts. Press `Ctrl+C` to stop the 
 
 For manual startup, use four terminals:
 
-**Terminal 1 - webz.io proxy**
+**Terminal 1 - FreeNewsApi proxy**
 ```bash
 node proxy-server.js
 ```

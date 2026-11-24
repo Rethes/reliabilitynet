@@ -3,7 +3,6 @@ import { fetchNews, checkProxy } from '../services/newsApi';
 import { getSourceName, getPublished } from '../utils/helpers';
 
 
-const API_KEY = import.meta.env.VITE_API_KEY;
 const PAGE_SIZE = 12;
 
 export function hasPrimaryCategory(article, category) {
@@ -80,7 +79,7 @@ export function useNews() {
   const [filteredArticles, setFilteredArticles] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null); // null | 'proxy' | 'api_key' | 'auth' | 'generic'
+  const [error, setError] = useState(null); // null | 'proxy' | 'auth' | 'generic'
   const [progress, setProgress] = useState(null); // null | { text, pct }
   const [selectedSources, setSelectedSources] = useState(new Set());
   const loadRequestRef = useRef(0);
@@ -104,11 +103,6 @@ export function useNews() {
 
   const loadNews = useCallback(async (filters) => {
     const requestId = ++loadRequestRef.current;
-    if (!API_KEY) {
-      if (requestId === loadRequestRef.current) setError('api_key');
-      return;
-    }
-
     const alive = await checkProxy();
     if (requestId !== loadRequestRef.current) return;
     if (!alive) { setError('proxy'); return; }
@@ -133,7 +127,7 @@ export function useNews() {
     };
 
     try {
-      const articles = await fetchNews(API_KEY, filters, (prog) => {
+      const articles = await fetchNews(filters, (prog) => {
         if (requestId !== loadRequestRef.current) return;
         setProgress(prog);
       }, (batch) => {
@@ -147,8 +141,11 @@ export function useNews() {
       applyFilters(articles, new Set(), filters);
     } catch (err) {
       if (requestId !== loadRequestRef.current) return;
-      const code = err.message.includes('401') || err.message.includes('403') ? 'auth' : 'generic';
-      setError(code);
+      const status = err.status || Number(err.message.match(/\bHTTP (\d+)\b/)?.[1]);
+      if (status === 402) setError('billing');
+      else if (status === 429) setError('rateLimit');
+      else if (status === 401 || status === 403) setError('auth');
+      else setError('generic');
     } finally {
       if (requestId === loadRequestRef.current) {
         setIsLoading(false);

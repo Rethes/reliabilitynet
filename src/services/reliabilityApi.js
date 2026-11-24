@@ -1,4 +1,5 @@
-const RELIABILITY_API = 'http://localhost:5001';
+import { mlApiBase } from './apiConfig';
+
 const ANALYSIS_BATCH_SIZE = 10;
 
 function getApiSentiment(article) {
@@ -133,9 +134,9 @@ export async function batchPredictReliability(articles, onBatch) {
   if (!Array.isArray(articles) || articles.length === 0) return articles;
 
   try {
-    const response = await fetch(`${RELIABILITY_API}/health`, { signal: AbortSignal.timeout(1500) });
+    const response = await fetch(`${mlApiBase}/health`, { signal: AbortSignal.timeout(5000) });
     if (!response.ok || (await response.json()).status !== 'healthy') {
-      console.warn('[Reliability API] Model server is offline. Skipping reliability analysis.');
+      console.warn('[Reliability API] Model service is offline. Skipping reliability analysis.');
       return publishBatches(articles.map(withEmptyModelOutputs), onBatch);
     }
 
@@ -145,11 +146,11 @@ export async function batchPredictReliability(articles, onBatch) {
       const payload = batch.map(article => ({
         uuid: article.uuid || article.url,
         title: article.title || '',
-        description: article.text || article.highlightText || article.thread?.title || '',
+        body: (article.text || article.highlightText || article.thread?.title || '').slice(0, 500),
       }));
 
       try {
-        const predictionResponse = await fetch(`${RELIABILITY_API}/predict/reliability`, {
+        const predictionResponse = await fetch(`${mlApiBase}/predict/reliability`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articles: payload }),

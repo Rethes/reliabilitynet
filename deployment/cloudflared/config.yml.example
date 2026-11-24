@@ -1,0 +1,8 @@
+# Copy this file to ~/.cloudflared/reliabilitynet-model.yml and replace the placeholders.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /Users/REPLACE_WITH_MACOS_USERNAME/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: ml.yourdomain.com
+    service: http://127.0.0.1:5001
+  - service: http_status:404

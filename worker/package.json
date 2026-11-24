@@ -1,0 +1,16 @@
+{
+  "name": "reliabilitynet-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "hono": "4.13.17"
+  },
+  "devDependencies": {
+    "wrangler": "4.159.0"
+  }
+}

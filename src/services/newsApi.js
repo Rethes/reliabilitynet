@@ -1,9 +1,8 @@
 import { batchPredictReliability, markModelPending } from './reliabilityApi';
+import { newsApiBase, newsApiOrigin, newsHealthUrl } from './apiConfig';
 
-const PROXY_BASE = 'http://localhost:3131';
-const DEFAULT_Q = 'news';
+const DEFAULT_Q = '*';
 const TARGET_ARTICLES = 10;
-const BATCH_SIZE = 1;
 
 function isEnglishArticle(article) {
   const language = String(article?.language || '').trim().toLowerCase();
@@ -15,34 +14,51 @@ function isEnglishArticle(article) {
 
 export async function checkProxy() {
   try {
-    const r = await fetch(`${PROXY_BASE}/ping`, { signal: AbortSignal.timeout(1500) });
+    const r = await fetch(newsHealthUrl, { signal: AbortSignal.timeout(1500) });
     return r.ok;
   } catch {
     return false;
   }
 }
 
-async function proxyFetch(apiKey, params = {}) {
-  const qs = new URLSearchParams({ token: apiKey, ...params }).toString();
-  const url = `${PROXY_BASE}/newsApiLite?${qs}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+async function proxyFetch(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${newsApiBase}?${qs}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const error = new Error(body?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
 async function proxyFetchNext(nextPath) {
-  const url = `${PROXY_BASE}${nextPath}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const url = `${newsApiOrigin}${nextPath}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const error = new Error(body?.error || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
-export async function fetchNews(apiKey, filters = {}, onProgress, onArticlesBatch) {
-  if (!apiKey) throw new Error('NO_API_KEY');
-
-  const q = filters.search || DEFAULT_Q;
-  const params = { q, size: BATCH_SIZE, highlight: false };
-  if (filters.dateFrom) params.ts = new Date(filters.dateFrom).getTime();
+export async function fetchNews(filters = {}, onProgress, onArticlesBatch) {
+  const search = filters.search?.trim();
+  const params = {
+    language: 'en',
+    order_by: 'recent',
+  };
+  if (search && search !== DEFAULT_Q) params.in_title = search;
+  if (filters.dateFrom) {
+    params.published_after = new Date(`${filters.dateFrom}T00:00:00`).toISOString();
+  }
+  if (filters.dateTo) {
+    params.published_before = new Date(`${filters.dateTo}T23:59:59.999`).toISOString();
+  }
 
   let collected = [];
   let analyzedArticles = [];
@@ -68,14 +84,17 @@ export async function fetchNews(apiKey, filters = {}, onProgress, onArticlesBatc
     });
   };
 
-  let json = await proxyFetch(apiKey, params);
+  let json = await proxyFetch(params);
   if (!Array.isArray(json.posts)) return [];
   const englishPosts = json.posts.filter(isEnglishArticle);
   collected.push(...englishPosts);
   queueAnalysis(englishPosts);
   onProgress?.({ text: `Fetching articles… ${collected.length} / ${TARGET_ARTICLES}`, pct: (collected.length / TARGET_ARTICLES) * 100 });
 
-  while (collected.length < TARGET_ARTICLES && json.next && json.moreResultsAvailable > 0) {
+  const hasMoreResults = () => (
+    (json.more_results_available ?? json.moreResultsAvailable ?? 0) > 0
+  );
+  while (collected.length < TARGET_ARTICLES && json.next && hasMoreResults()) {
     json = await proxyFetchNext(json.next);
     if (!Array.isArray(json.posts) || json.posts.length === 0) break;
     const englishPage = json.posts.filter(isEnglishArticle);
@@ -91,4 +110,3 @@ export async function fetchNews(apiKey, filters = {}, onProgress, onArticlesBatc
   onProgress?.(null);
   return analyzedArticles;
 }
-

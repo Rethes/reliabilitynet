@@ -53,10 +53,10 @@ export default function SentimentBadge({
         className={`${styles.badge} ${modelMeta?.cls || styles.neutral}`}
         title={modelTitle.join('\n')}
       >
-        Model: {isPending
+        Sentiment: {isPending
           ? <span className="model-pending"><span className="model-pending-spinner" />Analyzing</span>
           : modelMeta ? `${modelMeta.label}${modelPctStr}` : 'Unavailable'}
-          
+
       </span>
 
       {/*

@@ -23,7 +23,11 @@ export default function ArticleModal({ article, onClose }) {
   const colour = getSourceColour(src);
   const cats = Array.isArray(article.categories) ? article.categories : [];
   const img = article.thread?.main_image || '';
-  const snippet = article.highlightText ? article.highlightText.replace(/<[^>]+>/g, '') : '';
+  const rawBody = (article.text || article.highlightText || article.thread?.title || '').trim();
+  const isTruncated = rawBody.length > 500;
+  const truncated = rawBody.slice(0, 500).trimEnd();
+  const hasEllipsis = truncated.endsWith('...') || truncated.endsWith('…');
+  const bodyText = isTruncated && !hasEllipsis ? `${truncated}...` : truncated;
   const isSaved = !!state.savedArticles[id];
   const reaction = state.reactions[id] || { likes: 0, dislikes: 0, userReaction: null };
 
@@ -106,11 +110,11 @@ export default function ArticleModal({ article, onClose }) {
             ))}
           </div>
 
-          {/* Snippet */}
-          {snippet ? (
-            <p className={styles.desc}>{snippet}</p>
+          {/* Body */}
+          {bodyText ? (
+            <p className={styles.desc}>{bodyText}</p>
           ) : (
-            <p className={styles.descEmpty}>Full article text is not available in the Webz.io News API Lite plan.</p>
+            <p className={styles.descEmpty}>Article summary is not available.</p>
           )}
 
           {/* CTA */}
