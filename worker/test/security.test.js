@@ -32,8 +32,9 @@ test('JWT verification accepts valid signatures and rejects tampering', async ()
   assert.equal(verified.email, user.email);
   assert.equal(await verifyUserToken(token, randomUUID()), null);
 
-  const finalCharacter = token.at(-1);
-  const tampered = `${token.slice(0, -1)}${finalCharacter === 'a' ? 'b' : 'a'}`;
+  const signatureIndex = token.lastIndexOf('.') + 1;
+  const signatureChar = token[signatureIndex];
+  const tampered = `${token.slice(0, signatureIndex)}${signatureChar === 'a' ? 'b' : 'a'}${token.slice(signatureIndex + 1)}`;
   assert.equal(await verifyUserToken(tampered, secret), null);
 });
 

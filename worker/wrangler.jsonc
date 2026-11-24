@@ -30,7 +30,8 @@
       "workers_dev": true,
       "preview_urls": false,
       "vars": {
-        "ALLOWED_ORIGINS": "https://reliabilitynet.pages.dev"
+        "ALLOWED_ORIGINS": "https://reliabilitynet.pages.dev",
+        "ML_ORIGIN": "https://jockstrap-track-paradox.ngrok-free.dev"
       },
       "d1_databases": [
         {
