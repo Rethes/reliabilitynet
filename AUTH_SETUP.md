@@ -79,16 +79,30 @@ Open http://localhost:5173
 
 ---
 
-## Auth API Endpoints (port 4000)
+## Auth API Endpoints (Local port 4000 & Cloudflare Worker `/api`)
+
+In local development, requests hit `http://localhost:4000`. In production, requests hit `https://reliabilitynet-api-production.rethesmutua.workers.dev/api`.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/auth/register` | — | Register with email + password |
 | POST | `/auth/login` | — | Login, receive JWT |
 | GET | `/auth/me` | ✓ | Verify token, get current user |
+| PUT | `/auth/profile` | ✓ | Update email address |
+| PUT | `/auth/password` | ✓ | Change account password |
 | GET | `/saves` | ✓ | List all saved articles |
 | POST | `/saves` | ✓ | Save an article |
 | DELETE | `/saves/:articleId` | ✓ | Unsave an article |
+
+---
+
+## Production Cloudflare D1 Database
+
+In production, user authentication and saved articles are handled by Cloudflare Workers and backed by a serverless Cloudflare D1 SQLite database (`reliabilitynet-db`):
+
+- **Routes**: Implemented in `worker/src/auth.js` and `worker/src/articles.js`
+- **Security**: Passwords hashed with PBKDF2 (100,000 iterations, SHA-256) and verified in constant-time; JWTs signed with Web Crypto HMAC SHA-256 using `JWT_SECRET` stored as a Cloudflare secret.
+- **Migrations**: Managed under `worker/migrations/0001_initial_auth_and_saves.sql` and applied via `npx wrangler d1 migrations apply reliabilitynet-db --remote`.
 
 ---
 
